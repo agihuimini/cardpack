@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>cardpack (목업 v0.2)</title>
+<title>cardpack (목업 v0.3)</title>
 <link rel="stylesheet" href="css/unpack.css">
 <style>
 :root{--bg:#14161c;--panel:#1d2029;--panel2:#242835;--line:#2c303c;--text:#e8e9ee;--muted:#9097a8;--accent:#5b8cff;--good:#2bb673;--bad:#ff6b6b;--warn:#ffd76a}
@@ -19,18 +19,18 @@ button:disabled{opacity:.4;cursor:default}
 a{color:#8fb0ff}
 
 /* ---------- 메인 화면 ---------- */
-#app{max-width:1100px;margin:0 auto;padding:0 16px 48px}
+#app{max-width:1560px;margin:0 auto;padding:0 16px 48px}
+.narrow{max-width:1000px;margin:0 auto}
 h1{font-size:22px;margin:18px 0 10px}
 h2{font-size:15px;margin:22px 0 8px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 h2 small,.muted{color:var(--muted);font-weight:400;font-size:12px}
 .topbar{position:sticky;top:0;z-index:10;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;padding:10px 14px;margin:0 -16px;background:var(--panel);border-bottom:1px solid var(--line);padding-top:calc(10px + env(safe-area-inset-top,0px))}
 .topbar b{font-size:16px}
 .topbar .sp{margin-left:auto}
-.msg{margin:10px 0;padding:8px 12px;background:#2a2617;border:1px solid #5a4f22;border-radius:6px;white-space:pre-line;min-height:20px}
+.msg{margin:10px auto;max-width:1000px;padding:8px 12px;background:#2a2617;border:1px solid #5a4f22;border-radius:6px;white-space:pre-line;min-height:20px}
 .box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:6px 0}
 .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px}
-.corner{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel2)}
+.corner{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel2);margin-top:8px}
 .corner h3{margin:0 0 8px;font-size:14px}
 .wrap{overflow-x:auto}
 table{border-collapse:collapse;width:100%}
@@ -38,11 +38,43 @@ td,th{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;font-s
 th{color:var(--muted);font-weight:500}
 .pill{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;border:1px solid var(--line);color:var(--muted)}
 .pill.on{color:#fff;background:var(--good);border-color:var(--good)}
-.item{display:inline-flex;flex-direction:column;gap:2px;text-align:left;max-width:240px}
-.item small{color:var(--muted);font-size:11px}
 .big-cta{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 
-/* 보관함 미니 카드 */
+/* 3단 레이아웃: 왼쪽 배너(아이템 상점) / 가운데 / 오른쪽 배너(업그레이드 상점) */
+.layout{display:grid;grid-template-columns:230px minmax(0,1fr) 250px;gap:16px;align-items:start;margin-top:4px}
+.layout main{min-width:0}
+.banner{position:sticky;top:64px;max-height:calc(100vh - 76px);overflow-y:auto;margin-top:14px;padding:0 10px 12px;border-radius:12px;
+  background:linear-gradient(180deg,#232838,#1b1f2a);border:1px solid #343a4c;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.banner.left{border-top:4px solid #3fb8a9}.banner.right{border-top:4px solid #c792ff}
+.ribbon{margin:0 -10px 8px;padding:9px 12px;font-weight:800;letter-spacing:.02em;background:rgba(255,255,255,.04);border-bottom:1px solid #343a4c}
+.ribbon.sub{margin-top:12px;font-size:13px;font-weight:700}
+.banner p{margin:4px 0 8px}
+.sitem{display:flex;flex-direction:column;gap:3px;padding:8px;margin-bottom:6px;border-radius:8px;background:rgba(0,0,0,.22);border:1px solid #2f3445}
+.sitem small{color:var(--muted);font-size:11px;line-height:1.35}
+.sitem button{align-self:flex-start;margin-top:2px}
+.locked{padding:12px;border-radius:8px;border:1px dashed #4a4f62;text-align:center;line-height:1.6}
+.effs{margin:4px 0 0;padding-left:18px;font-size:12px}
+@media (max-width:1100px){
+  .layout{grid-template-columns:1fr 1fr}
+  .layout main{grid-column:1 / -1;order:-1}
+  .banner{position:static;max-height:none}
+}
+@media (max-width:640px){ .layout{grid-template-columns:1fr} }
+
+/* 특수 팩 */
+.tpacks{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.tpack{display:flex;flex-direction:column;gap:4px;padding:10px;border-radius:10px;background:linear-gradient(160deg,#2b2350,#3d1f45);border:1px solid #5b4a8a}
+.tpack .tp-name{font-weight:800}
+.tpack small{color:#c9c2e6;font-size:11px}
+.tpack button{align-self:flex-start}
+
+/* 대회 */
+.contest{border:2px solid #d4a72c;background:linear-gradient(160deg,#2b2412,#1d2029);border-radius:12px;padding:4px 14px 12px;margin-top:12px}
+.meter{position:relative;height:26px;border-radius:13px;background:#14161c;border:1px solid #4a4022;overflow:hidden}
+.meter div{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,#b8860b,#ffd76a)}
+.meter span{position:relative;display:block;text-align:center;line-height:26px;font-weight:700;font-size:13px;text-shadow:0 1px 2px #000}
+
+/* 미니 카드 (상점 진열용) */
 .minis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
 .mini{border-radius:7px;padding:3px;background:var(--g,#a9a49a)}
 .mini .in{background:#f6f1e6;color:#22232a;border-radius:5px;padding:4px 6px;font-size:12px;line-height:1.35}
@@ -56,7 +88,50 @@ th{color:var(--muted);font-weight:500}
 .g-event{--g:linear-gradient(115deg,#ffd76a,#ff7773,#d875ff,#83fff7)}
 .mini.f-black .in{background:#0c0c0e;color:#f2f2f2}
 
-/* 앨범 */
+/* ---------- 도감: 스위치 칩 케이스처럼 오목한 칸에 카드가 끼워진 책 ---------- */
+.book{display:flex;align-items:center;gap:10px;perspective:1800px}
+.turn{flex:none;width:42px;height:120px;font-size:20px;border-radius:10px}
+.pagewrap{flex:1;min-width:0;padding:6px;border-radius:16px;background:linear-gradient(90deg,#11131a,#1a1d27 6%,#1a1d27 94%,#11131a);box-shadow:0 10px 30px rgba(0,0,0,.5),inset 0 0 0 1px #2c3040}
+.page{border-radius:12px;padding:12px 14px 16px;transform-origin:left center;
+  background:radial-gradient(120% 90% at 30% 0%,#2e3446,#232838 60%,#1d2130);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),inset 0 -2px 6px rgba(0,0,0,.4)}
+.page.freep{background:radial-gradient(120% 90% at 30% 0%,#2f3a36,#232c2a 60%,#1c2422)}
+.page.in-next{animation:pageNext .5s cubic-bezier(.2,.7,.2,1)}
+.page.in-prev{animation:pagePrev .5s cubic-bezier(.2,.7,.2,1);transform-origin:right center}
+@keyframes pageNext{from{transform:rotateY(-80deg);opacity:.2;filter:brightness(.6)}to{transform:none;opacity:1;filter:none}}
+@keyframes pagePrev{from{transform:rotateY(80deg);opacity:.2;filter:brightness(.6)}to{transform:none;opacity:1;filter:none}}
+.ptitle{font-weight:800;font-size:13px;color:#c9cfdf;margin-bottom:8px;letter-spacing:.04em}
+.brow{display:flex;gap:10px;align-items:center;margin-bottom:10px;padding:6px 8px;border-radius:10px;border:1px solid transparent}
+.brow.done{border-color:#d4a72c;background:rgba(212,167,44,.08);box-shadow:0 0 18px rgba(255,215,106,.15)}
+.rlabel{flex:none;width:86px;font-size:12px;color:#b8bfd3;line-height:1.4}
+.rlabel b{color:#ffd76a}
+.bcells{display:grid;grid-template-columns:repeat(4,minmax(0,104px));gap:12px}
+.bcells.free{grid-template-columns:repeat(4,minmax(0,104px))}
+.bslot{--cw:94px;--ch:132px;position:relative;aspect-ratio:104/142;border-radius:12px;cursor:default;
+  background:linear-gradient(180deg,#151821,#1b1f2b);
+  box-shadow:inset 0 4px 10px rgba(0,0,0,.75),inset 0 -1px 0 rgba(255,255,255,.07),inset 0 0 0 1px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.05)}
+.bslot .no{position:absolute;left:8px;top:6px;font-size:10px;color:#5d6478;font-weight:700}
+.bslot .ghost{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-size:11px;color:#4d5468;line-height:1.5;filter:grayscale(1);opacity:.6}
+.bslot.has{cursor:pointer}
+.bslot.has .ghost,.bslot.has .no{display:none}
+.bslot.sel{outline:3px solid var(--accent);outline-offset:2px}
+.bcard{position:absolute;inset:5px;transform-style:preserve-3d;filter:drop-shadow(0 3px 3px rgba(0,0,0,.6))}
+.bcard .card{cursor:pointer}
+.bcard .card:hover{transform:translateY(-3px)}
+.bcard .zoom{font-size:.8em}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 0 52px;align-items:center}
+.tabs .tab{padding:3px 8px;font-size:12px}
+.tabs .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.selbar{border-color:var(--accent)}
+@media (max-width:640px){
+  .turn{width:30px;height:80px}
+  .brow{flex-direction:column;align-items:stretch;gap:4px}
+  .rlabel{width:auto}
+  .bcells,.bcells.free{gap:6px}
+  .bslot{--cw:64px;--ch:90px}
+  .tabs{margin-left:0}
+}
+
+/* 카드 앨범 (메타) */
 .alb{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
 .alb div{border:1px solid var(--line);border-radius:6px;padding:6px;font-size:12px;background:var(--panel)}
 .alb .s0{color:#555}.alb .s1{color:var(--muted)}.alb .s2{border-color:var(--good)}
