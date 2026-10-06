@@ -29,6 +29,7 @@ const W = [ // grade, name, short, mult, p
 //  tagMult: 같은 분류 N장 이상이면 그 분류 ×N  sameRarity: 같은 등급의 다른 카드 +N
 //  dupe: 같은 카드가 더 있으면 1장당 자신 +N   perTag: 다른 같은 분류 카드 1장당 자신 +N
 //  lowAdd: 일반·브론즈 카드 전부 +N            highMul: 골드 이상 카드 전부 ×N     allAdd: 모든 카드 +N
+//  edgeSelf: 맨 앞·맨 끝이면 자신 ×N   firstAll: 맨 앞이면 모든 카드 +N   lastAll: 맨 끝이면 모든 카드 ×N   lastTag: 맨 끝이면 같은 분류 ×N
 const POOL = [
   {id:'apple',  name:'사과',   art:'🍎', tag:'과일', ab:{t:'tagAll',tag:'과일',add:1}},
   {id:'orange', name:'귤',     art:'🍊', tag:'과일', ab:{t:'adjAdd',add:1}},
@@ -82,6 +83,10 @@ function abText(ab) {
   if (ab.t === 'lowAdd') return `일반·브론즈 카드 전부 +${ab.add}원`;
   if (ab.t === 'highMul') return `골드 이상 카드 전부 ×${ab.mult}`;
   if (ab.t === 'allAdd') return `팩 내 모든 카드 +${ab.add}원`;
+  if (ab.t === 'edgeSelf') return `팩 맨 앞·맨 끝에 있으면 자신 ×${ab.mult}`;
+  if (ab.t === 'firstAll') return `팩 맨 앞에 있으면 모든 카드 +${ab.add}원`;
+  if (ab.t === 'lastAll') return `팩 맨 끝에 있으면 모든 카드 ×${ab.mult}`;
+  if (ab.t === 'lastTag') return `팩 맨 끝에 있으면 ${ab.tag} 카드 전부 ×${ab.mult}`;
 }
 // ---------- pricing ----------
 // 공개된 카드들 사이의 능력 기여 목록. 가격 = (기본가 + Σ덧셈) × Π배율 (발라트로식: 덧셈 먼저, 배율 나중)
@@ -103,6 +108,12 @@ function contributions(list, open) {
     if (a.t === 'lowAdd') idx.filter(t => list[t].r.tier === 0 && ['common','bronze'].includes(list[t].r.id)).forEach(t => push(s, t, 'add', a.add));
     if (a.t === 'highMul') idx.filter(t => list[t].r.tier >= 1).forEach(t => push(s, t, 'mul', a.mult));
     if (a.t === 'allAdd') idx.forEach(t => push(s, t, 'add', a.add));
+    // 위치 능력: 팩에서 나온 순서상 맨 앞(0) / 맨 끝(마지막)일 때만 발동
+    const last = list.length - 1;
+    if (a.t === 'edgeSelf' && (s === 0 || s === last)) push(s, s, 'mul', a.mult);
+    if (a.t === 'firstAll' && s === 0) idx.forEach(t => push(s, t, 'add', a.add));
+    if (a.t === 'lastAll' && s === last) idx.forEach(t => push(s, t, 'mul', a.mult));
+    if (a.t === 'lastTag' && s === last) idx.filter(t => list[t].def.tag === a.tag).forEach(t => push(s, t, 'mul', a.mult));
   }
   return out;
 }

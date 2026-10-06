@@ -132,8 +132,10 @@ async function tearPack(hard) {
   slots = cards.map((c, i) => {
     const s = document.createElement('div');
     s.className = 'slot init' + (c.r.tier >= 2 ? ` leaky lk-${c.r.id}` : '');
-    const k = i - 4;
-    s.style.cssText = `--i:${i};--k:${k};--k2:${k * k};--gx:${((i < 5 ? i : i - 5) - (i < 5 ? 2 : 1.5)) * 160}px;--gy:${i < 5 ? -140 : 120}px`;
+    // 장수에 맞춰 부채꼴 중심·2줄 격자 배치 (9장이면 원래 데모 배치와 같음: 5장 + 4장)
+    const n = cards.length, k = i - (n - 1) / 2, top = Math.ceil(n / 2), row1 = i < top;
+    const j = row1 ? i : i - top, rowN = row1 ? top : n - top;
+    s.style.cssText = `--i:${i};--k:${k};--k2:${k * k};--gx:${(j - (rowN - 1) / 2) * 160}px;--gy:${row1 ? -140 : 120}px`;
     s.innerHTML = `<div class="shaker"></div><div class="tag"></div><div class="keep-badge">보관</div>`;
     const card = cardEl(c);
     s.querySelector('.shaker').appendChild(card);
@@ -146,7 +148,7 @@ async function tearPack(hard) {
   });
   void t.offsetWidth;
   slots.forEach((s, i) => { s.style.transitionDelay = i * 55 + 'ms'; s.classList.remove('init'); });
-  await wait(600 + 9 * 55);
+  await wait(600 + cards.length * 55);
   slots.forEach(s => s.style.transitionDelay = '');
   fast = false; skipFns = [];
   state = 'reveal'; renderBar();
@@ -222,11 +224,11 @@ function flash(tier) {
   if (tier >= 3) { const st = $('#stage'); st.classList.remove('quake'); void st.offsetWidth; st.classList.add('quake'); }
 }
 
-async function flipOne(i) {
+async function flipOne(i, quick) {
   const s = slots[i];
   if (s.classList.contains('flipped') || s.dataset.flipping) return;
   s.dataset.flipping = 1;
-  const tier = fxTier(cards[i]);
+  const tier = quick ? 0 : fxTier(cards[i]); // quick: 등급과 무관하게 바로 뒤집음
   const inner = s.querySelector('.inner');
   if (tier === 0) {
     inner.style.setProperty('--fd', '.5s');
@@ -281,10 +283,12 @@ async function score(newIdx) {
     else if (o.val !== k.val) evs.push({...k, d: k.kind === 'add' ? k.val - o.val : k.val / o.val});
   }
   evs.sort((a, b) => a.s - b.s || a.t - b.t);
-  const step = newIdx.length > 1 ? 170 : 260;
+  // QUICK_FLIP_ALL 의 [모두 뒤집기]는 계산 연출도 짧게 (효과 개수와 관계없이 약 1.5초 안쪽)
+  const quick = window.QUICK_FLIP_ALL && newIdx.length > 1;
+  const step = quick ? Math.min(70, 1200 / Math.max(1, evs.length)) : newIdx.length > 1 ? 170 : 260;
   let lastS = -1;
   for (const e of evs) {
-    if (e.s !== lastS) { lastS = e.s; if (!fast) { jiggle(e.s); await wait(150); } }
+    if (e.s !== lastS) { lastS = e.s; if (!fast) { jiggle(e.s); await wait(quick ? 40 : 150); } }
     if (e.kind === 'add') disp[e.t].add += e.d; else disp[e.t].mul *= e.d;
     if (!fast) popAt(e.t, e.kind === 'add' ? `+${r1(e.d)}` : `×${r1(e.d)}`, e.kind);
     setTag(e.t, price(e.t), fast ? null : e.kind);
@@ -316,6 +320,15 @@ function onCardClick(e, i) {
 function flipAll() {
   run(async () => {
     const pending = slots.map((s, i) => i).filter(i => !slots[i].classList.contains('flipped'));
+    // 페이지가 QUICK_FLIP_ALL = true 로 두면 [모두 뒤집기] 시 고등급의 흔들림·느린 뒤집기 없이 한꺼번에 뒤집고 번쩍임만 1번
+    if (window.QUICK_FLIP_ALL) {
+      const done = pending.map((i, n) => new Promise(res => setTimeout(() => flipOne(i, true).then(res), n * 60)));
+      await Promise.all(done);
+      const top = Math.max(0, ...pending.map(i => fxTier(cards[i])));
+      if (top > 0) flash(top);
+      await score(pending);
+      return;
+    }
     const low = pending.filter(i => fxTier(cards[i]) === 0);
     const high = pending.filter(i => fxTier(cards[i]) > 0).sort((a, b) => fxTier(cards[a]) - fxTier(cards[b]));
     // 연출 스킵으로 wait가 일찍 끝나도, 예약된 낮은 등급 뒤집기가 모두 끝난 뒤 정산으로 넘어가도록 기다린다
@@ -337,21 +350,22 @@ async function settle() {
 
 // ---------- inspect modal ----------
 let insp = null;
-function openInspect(i) {
-  const c = cards[i];
+function openInspect(i) { inspectCard(cards[i], openMask.every(Boolean)); }
+// 카드 객체 하나를 자세히 보기 (개봉 중이 아닌 카드도 가능: c.base/c.notes/c.price 필요)
+function inspectCard(c, locked) {
   const holder = $('#holder');
   holder.innerHTML = '';
   const el = cardEl(c);
   el.classList.add('inspect', 'flipped');
   el.querySelector('.zoom').remove();
   holder.appendChild(el);
-  insp = {el, rx: 0, ry: 0, drag: null};
+  insp = {el, rx: 0, ry: 0, drag: null, turn: 0, last: performance.now()};
   applyInsp(false);
-  const locked = openMask.every(Boolean);
+  requestAnimationFrame(inspLoop);
   $('#info').innerHTML = `<b>${c.def.art} ${c.def.name}</b> · ${c.def.tag} · ${c.r.name}${c.r.mark ? ` (${c.r.mark})` : ''} · ${c.f.name} · ${c.w.name} (${c.w.g})<br>` +
-    `기본가 ${c.r.base} × 마감 ${c.f.mult} × 마모 ${c.w.mult} = ${fmt(c.base)}${c.notes.length ? ' → ' + c.notes.join(', ') : ''} → <b>${fmt(c.price)}</b>` +
-    (locked ? ' (확정)' : ' (현재 · 9장 모두 공개 시 확정)') +
-    `<br>${abText(abOf(c))}${c.def.ab && c.r.ap > 1 ? ` <span style="opacity:.7">(${c.r.name} 등급 보정: 기본 「${abText(c.def.ab)}」)</span>` : ''}<br>드래그해서 돌려보기 · 휠로 확대`;
+    `기본가 ${c.r.base} × 마감 ${c.f.mult} × 마모 ${c.w.mult}${c.bm && c.bm !== 1 ? ` × 보정 ${c.bm}` : ''} = ${fmt(c.base)}${c.notes.length ? ' → ' + c.notes.join(', ') : ''} → <b>${fmt(c.price)}</b>` +
+    (locked ? ' (확정)' : ` (현재 · ${cards.length}장 모두 공개 시 확정)`) +
+    `<br>${abText(abOf(c))}${c.def.ab && c.r.ap > 1 ? ` <span style="opacity:.7">(${c.r.name} 등급 보정: 기본 「${abText(c.def.ab)}」)</span>` : ''}<br>가만히 두면 천천히 회전 · 드래그해서 돌려보기 · 휠로 확대`;
   $('#modal').classList.add('open');
 }
 function applyInsp(anim) {
@@ -365,7 +379,7 @@ function applyInsp(anim) {
   el.style.setProperty('--h', ((ry + rx) * 2).toFixed(0));
 }
 const holder = $('#holder');
-holder.addEventListener('pointerdown', e => { if (!insp) return; insp.drag = {x: e.clientX, y: e.clientY}; holder.setPointerCapture(e.pointerId); });
+holder.addEventListener('pointerdown', e => { if (!insp) return; insp.drag = {x: e.clientX, y: e.clientY}; insp.turn = 0; insp.hold = 0; holder.setPointerCapture(e.pointerId); });
 holder.addEventListener('pointermove', e => {
   if (!insp || !insp.drag) return;
   insp.ry += (e.clientX - insp.drag.x) * .6;
@@ -374,9 +388,29 @@ holder.addEventListener('pointermove', e => {
   applyInsp(false);
 });
 holder.addEventListener('pointerup', () => { if (insp) insp.drag = null; });
+holder.addEventListener('pointercancel', () => { if (insp) insp.drag = null; });
+// 조작하지 않을 때: 위아래 기울기는 0으로 되돌아오고(Y축 정렬) Y축으로 천천히 자동 회전
+const INSP_SPIN = 24;   // 자동 회전 속도 (도/초)
+const INSP_TURN = 420;  // 뒤집기·정면 버튼 회전 속도 (도/초)
+function inspLoop(now) {
+  if (!insp) return;
+  const dt = Math.min(.05, (now - insp.last) / 1000);
+  insp.last = now;
+  if (!insp.drag) {
+    insp.rx += (0 - insp.rx) * Math.min(1, dt * 5);
+    if (Math.abs(insp.rx) < .05) insp.rx = 0;
+    if (insp.turn) {
+      const step = Math.sign(insp.turn) * Math.min(Math.abs(insp.turn), INSP_TURN * dt);
+      insp.ry += step; insp.turn -= step;
+      if (Math.abs(insp.turn) < .01) { insp.turn = 0; insp.hold = now + 1200; }
+    } else if (!insp.hold || now > insp.hold) insp.ry += INSP_SPIN * dt;
+    applyInsp(false);
+  }
+  requestAnimationFrame(inspLoop);
+}
 holder.addEventListener('wheel', e => { if (!insp) return; e.preventDefault(); insp.z = Math.max(.6, Math.min(1.6, (insp.z || 1) - e.deltaY * .001)); applyInsp(false); }, {passive: false});
-$('#mFlip').onclick = () => { insp.ry += 180; applyInsp(true); };
-$('#mReset').onclick = () => { insp.rx = 0; insp.ry = Math.round(insp.ry / 360) * 360; insp.z = 1; applyInsp(true); };
+$('#mFlip').onclick = () => { insp.turn += 180; };
+$('#mReset').onclick = () => { insp.z = 1; insp.turn = Math.round((insp.ry + insp.turn) / 360) * 360 - insp.ry; };
 $('#mClose').onclick = () => { $('#modal').classList.remove('open'); insp = null; };
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') $('#mClose').click(); });
 
