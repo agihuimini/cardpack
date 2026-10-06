@@ -318,8 +318,9 @@ function flipAll() {
     const pending = slots.map((s, i) => i).filter(i => !slots[i].classList.contains('flipped'));
     const low = pending.filter(i => fxTier(cards[i]) === 0);
     const high = pending.filter(i => fxTier(cards[i]) > 0).sort((a, b) => fxTier(cards[a]) - fxTier(cards[b]));
-    low.forEach((i, n) => setTimeout(() => flipOne(i), n * 70));
-    if (low.length) { await wait(low.length * 70 + 550); await score(low); }
+    // 연출 스킵으로 wait가 일찍 끝나도, 예약된 낮은 등급 뒤집기가 모두 끝난 뒤 정산으로 넘어가도록 기다린다
+    const lowDone = low.map((i, n) => new Promise(res => setTimeout(() => flipOne(i).then(res), n * 70)));
+    if (low.length) { await wait(low.length * 70 + 550); await Promise.all(lowDone); await score(low); }
     for (const i of high) { await flipOne(i); await score([i]); }
   });
 }

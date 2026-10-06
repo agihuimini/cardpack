@@ -1,7 +1,7 @@
 // cardpack — localStorage 저장 (모든 접근을 try/catch로 감싼다)
 (function (root) {
-  const SAVE_KEY = 'cardpack.save.v1';
-  const META_KEY = 'cardpack.meta.v1';
+  const SAVE_KEY = 'cardpack.save.v2';
+  const META_KEY = 'cardpack.meta.v2';
 
   function read(key) {
     try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
