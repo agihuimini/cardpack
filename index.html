@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>cardpack (목업)</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; font-size: 14px; margin: 0; padding: 12px 16px 40px; background: #fafafa; color: #222; }
+  h1 { font-size: 20px; margin: 4px 0 12px; }
+  h2 { font-size: 15px; margin: 18px 0 6px; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
+  button { font: inherit; padding: 4px 9px; margin: 2px 2px 2px 0; cursor: pointer; border: 1px solid #888; background: #fff; border-radius: 3px; }
+  button:disabled { color: #aaa; border-color: #ddd; cursor: default; }
+  button.big { padding: 8px 14px; font-weight: bold; }
+  .bar { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; padding: 8px 10px; background: #fff; border: 1px solid #ccc; position: sticky; top: 0; z-index: 2; }
+  .bar b { font-size: 16px; }
+  .msg { margin: 8px 0; padding: 6px 10px; background: #fffbe0; border: 1px solid #e5d98a; min-height: 18px; white-space: pre-line; }
+  .grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .card { width: 150px; border: 1px solid #999; background: #fff; padding: 6px; font-size: 12px; box-sizing: border-box; }
+  .card .t { font-weight: bold; font-size: 13px; }
+  .card .e { color: #555; margin: 3px 0; min-height: 16px; }
+  .r-C { border-color: #aaa; } .r-B { border-color: #4a8; } .r-A { border-color: #48c; border-width: 2px; }
+  .r-S { border-color: #a5c; border-width: 2px; background: #fbf6ff; } .r-SS { border-color: #d80; border-width: 3px; background: #fff8e8; }
+  .slot-empty { width: 150px; height: 70px; border: 1px dashed #bbb; color: #aaa; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .box { border: 1px solid #ccc; background: #fff; padding: 8px; margin: 4px 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .muted { color: #777; font-size: 12px; }
+  .tag { display: inline-block; padding: 0 5px; border: 1px solid #999; border-radius: 3px; font-size: 11px; margin-right: 3px; }
+  table { border-collapse: collapse; }
+  td, th { border: 1px solid #ccc; padding: 3px 7px; font-size: 13px; text-align: left; }
+  .wrap { overflow-x: auto; }
+  .alb { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 4px; }
+  .alb div { border: 1px solid #ccc; padding: 4px; font-size: 12px; background: #fff; }
+  .alb .s0 { color: #bbb; background: #f2f2f2; } .alb .s1 { color: #777; } .alb .s2 { font-weight: bold; }
+  .log { font-size: 12px; color: #555; max-height: 200px; overflow-y: auto; background: #fff; border: 1px solid #ddd; padding: 6px; }
+  .over { border: 3px solid #c33; background: #fff0f0; padding: 12px; margin: 10px 0; }
+</style>
+</head>
+<body>
+<div id="app">불러오는 중…</div>
+<script src="js/data.js"></script>
+<script src="js/game.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
