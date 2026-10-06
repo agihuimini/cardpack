@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cardpack 개봉 데모</title>
+<style>
+:root{
+  --bg:#14161c; --panel:#1d2029; --line:#2c303c; --text:#e8e9ee; --muted:#9097a8; --accent:#5b8cff;
+  --cw:150px; --ch:210px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif;overflow:hidden;display:flex;flex-direction:column}
+header{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel);font-size:13px}
+header h1{font-size:15px;margin:0 6px 0 0}
+header label{color:var(--muted);display:flex;gap:4px;align-items:center}
+.stat{margin-left:auto;display:flex;gap:14px}
+.stat b{color:var(--text)}
+select,button{font:inherit;background:#262a35;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.4;cursor:default}
+
+#stage{position:relative;flex:1;display:flex;align-items:center;justify-content:center;perspective:1400px;overflow:hidden}
+#stage.quake{animation:quake .45s}
+@keyframes quake{0%,100%{transform:none}20%{transform:translate(-6px,3px)}40%{transform:translate(5px,-4px)}60%{transform:translate(-4px,-2px)}80%{transform:translate(3px,3px)}}
+#table{position:relative;width:820px;height:540px;transform-style:preserve-3d;--gap:62px}
+#table.fan:hover{--gap:76px}
+
+footer{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;padding:10px 16px;border-top:1px solid var(--line);background:var(--panel);min-height:58px;font-size:13px}
+footer .hint{color:var(--muted)}
+
+/* ---------- pack ---------- */
+#pack{position:absolute;left:50%;top:50%;width:170px;height:250px;margin:-125px 0 0 -85px;cursor:grab;transition:transform .5s,opacity .5s;touch-action:none;user-select:none;--p:0}
+#pack.dragging{cursor:grabbing;transition:none}
+#pack .body,#pack .top{position:absolute;left:0;right:0;background:linear-gradient(160deg,#3a4cff,#9b3dff 55%,#ff4fa3);border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+#pack .top{top:0;height:34px;z-index:2;transform-origin:100% 100%;clip-path:polygon(0 0,100% 0,100% 80%,95% 100%,90% 80%,85% 100%,80% 80%,75% 100%,70% 80%,65% 100%,60% 80%,55% 100%,50% 80%,45% 100%,40% 80%,35% 100%,30% 80%,25% 100%,20% 80%,15% 100%,10% 80%,5% 100%,0 80%);
+  transition:transform .45s cubic-bezier(.3,1.7,.5,1),opacity .5s}
+#pack.dragging .top{transition:none}
+#pack .body{top:30px;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-weight:800;letter-spacing:.12em}
+#pack .body small{font-weight:500;letter-spacing:0;opacity:.8}
+#pack .grip{position:absolute;left:8px;top:6px;font-size:11px;font-weight:600;letter-spacing:0;opacity:.85;z-index:3;pointer-events:none;transition:opacity .2s}
+#pack.dragging .grip,#pack.torn .grip{opacity:0}
+/* 찢어진 틈: 드래그 진행도(--p)만큼 빛나는 절취선 */
+#pack .rip{position:absolute;left:0;top:27px;height:7px;width:calc(var(--p) * 100%);z-index:1;pointer-events:none;
+  background:repeating-linear-gradient(135deg,#fff 0 3px,#fff6c8 3px 6px);clip-path:polygon(0 50%,4% 0,8% 100%,12% 0,16% 100%,20% 0,24% 100%,28% 0,32% 100%,36% 0,40% 100%,44% 0,48% 100%,52% 0,56% 100%,60% 0,64% 100%,68% 0,72% 100%,76% 0,80% 100%,84% 0,88% 100%,92% 0,96% 100%,100% 50%);
+  filter:drop-shadow(0 0 6px #fff3b0)}
+#pack:hover:not(.torn):not(.dragging){transform:translateY(-6px) rotate(-1deg)}
+#pack.torn .top{transform:translate(70px,-90px) rotate(28deg);opacity:0}
+#pack.torn.hard .top{transform:translate(320px,-380px) rotate(140deg);opacity:0;transition:transform .5s cubic-bezier(.15,.7,.3,1),opacity .6s .15s}
+#pack.gone{transform:translateY(60px);opacity:0;pointer-events:none}
+/* 고등급 카드가 든 팩: 개봉 직후 빛기둥 + 흔들림 */
+#pack .beam{position:absolute;left:-60%;right:-60%;bottom:calc(100% - 32px);height:520px;opacity:0;pointer-events:none;transform-origin:50% 100%;
+  background:linear-gradient(to top,var(--hc,#fff3b0),rgba(255,255,255,0) 85%);
+  clip-path:polygon(42% 100%,58% 100%,100% 0,0 0);mix-blend-mode:screen;transition:opacity .3s}
+#pack.hype .beam{opacity:.95;animation:beam .18s infinite alternate}
+@keyframes beam{from{transform:scaleX(.85);filter:brightness(1)}to{transform:scaleX(1.1);filter:brightness(1.6)}}
+#pack.hype .body{animation:packShake .09s infinite;box-shadow:0 0 30px 8px var(--hc),0 0 90px 30px var(--hc)}
+@keyframes packShake{0%{transform:translate(0,0) rotate(0)}25%{transform:translate(calc(var(--ha) * -1),1px) rotate(-1deg)}50%{transform:translate(var(--ha),-1px) rotate(1deg)}75%{transform:translate(calc(var(--ha) * -.6),0) rotate(-.5deg)}100%{transform:translate(0,0)}}
+#stage.rumble{animation:rumble .11s infinite}
+@keyframes rumble{0%{transform:translate(0,0)}25%{transform:translate(-4px,2px)}50%{transform:translate(3px,-3px)}75%{transform:translate(-2px,-1px)}100%{transform:translate(2px,2px)}}
+#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:45}
+
+/* ---------- slot / card layers ---------- */
+.slot{position:absolute;left:50%;top:50%;width:var(--cw);height:var(--ch);margin:calc(var(--ch) / -2) 0 0 calc(var(--cw) / -2);transform-style:preserve-3d;
+  transition:transform .6s cubic-bezier(.2,.8,.2,1);
+  transform:translate3d(calc(var(--k) * var(--gap)),calc(var(--k2) * 5px + 10px),calc(var(--i) * 1px)) rotate(calc(var(--k) * 4deg))}
+.slot.init{transform:translate3d(0,0,0) scale(.8)!important;transition:none}
+#table.grid .slot{transform:translate3d(var(--gx),var(--gy),0)}
+#table.grid .slot.kept{transform:translate3d(var(--gx),calc(var(--gy) - 14px),0)}
+.shaker{width:100%;height:100%;transform-style:preserve-3d}
+.shaker.shake{animation:shake var(--sd,800ms) linear}
+@keyframes shake{
+  0%,100%{transform:translate(0,0) rotate(0)}
+  10%{transform:translate(calc(var(--amp) * -1),0) rotate(-1.5deg)}
+  20%{transform:translate(var(--amp),calc(var(--amp) * -.5)) rotate(1.5deg)}
+  30%{transform:translate(calc(var(--amp) * -.8),calc(var(--amp) * .4)) rotate(-1deg)}
+  40%{transform:translate(calc(var(--amp) * .8),0) rotate(1deg)}
+  50%{transform:translate(calc(var(--amp) * -1),calc(var(--amp) * -.3)) rotate(-1.5deg)}
+  60%{transform:translate(var(--amp),calc(var(--amp) * .3)) rotate(1.5deg)}
+  70%{transform:translate(calc(var(--amp) * -.6),0) rotate(-1deg)}
+  80%{transform:translate(calc(var(--amp) * .6),0) rotate(1deg)}
+  90%{transform:translate(calc(var(--amp) * -.3),0) rotate(0)}
+}
+.card{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .25s;cursor:pointer;font-size:calc(var(--cw) / 13.6);
+  --mx:50%; --my:50%; --h:0; --rx:0deg; --ry:0deg}
+.slot:hover .card{transform:translateZ(46px) translateY(-18px) rotateX(var(--rx)) rotateY(var(--ry));transition:transform .12s}
+.inner{position:absolute;inset:0;transform-style:preserve-3d;transition:transform var(--fd,.5s) cubic-bezier(.4,.1,.2,1)}
+.flipped .inner{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;border-radius:.9em;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden}
+
+/* back */
+.back{background:repeating-linear-gradient(45deg,#2a3a8f 0 8px,#22307a 8px 16px);border:.45em solid #e9e4d8;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+.back span{font-weight:800;letter-spacing:.15em;color:#e9e4d8;font-size:1.1em;transform:rotate(-30deg)}
+.shake .back{box-shadow:0 0 22px 6px var(--gc,#ffd76a),0 0 60px 14px var(--gc,#ffd76a)}
+
+/* front */
+/* 카드 = 넓은 등급색 테두리(.front 배경) 위에 제목·그림·설명·등급 박스만 올림. 박스 밖은 전부 테두리 색 */
+.front{transform:rotateY(180deg);background:var(--frame,#efe9dc);padding:.5em;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+.frame{position:relative;width:100%;height:100%;border-radius:.5em;color:#22232a;display:flex;flex-direction:column;gap:.4em}
+.cbg{position:absolute;inset:-.5em;pointer-events:none;border-radius:.9em}
+.top,.art,.desc,.meta{position:relative;background:var(--box,#f6f1e6);border-radius:.4em;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18),0 1px 2px rgba(0,0,0,.3)}
+.top{display:flex;justify-content:space-between;align-items:center;padding:.3em .5em;font-weight:700;font-size:1em}
+.top .mk{font-size:.85em;padding:0 .35em;border-radius:.3em;background:rgba(0,0,0,.08)}
+.art{height:44%;flex:none;display:flex;align-items:center;justify-content:center;font-size:3.6em}
+.desc{padding:.45em .55em;font-size:.78em;line-height:1.3;flex:1;overflow:hidden}
+.meta{padding:.25em .5em;font-size:.68em;color:#555;display:flex;justify-content:space-between}
+.holo,.glare,.wear{position:absolute;inset:0;pointer-events:none;border-radius:inherit}
+.holo{opacity:var(--ho,0);mix-blend-mode:color-dodge;filter:brightness(.7) contrast(1.5) saturate(1.3);
+  background-image:repeating-linear-gradient(110deg,#ff7773 0%,#ffed5f 6%,#a8ff5f 12%,#83fff7 18%,#7894ff 24%,#d875ff 30%,#ff7773 36%);
+  background-size:400% 400%;background-position:var(--mx) var(--my)}
+.glare{opacity:0;mix-blend-mode:overlay;background:radial-gradient(circle at var(--mx) var(--my),rgba(255,255,255,.85) 0%,rgba(255,255,255,0) 55%);transition:opacity .2s}
+.card:hover .glare,.inspect .glare{opacity:.75}
+.wear{opacity:var(--wo,0);mix-blend-mode:multiply;
+  background:
+    linear-gradient(17deg,transparent 30%,rgba(90,70,50,.55) 30.4%,transparent 30.8%),
+    linear-gradient(-61deg,transparent 58%,rgba(90,70,50,.5) 58.3%,transparent 58.7%),
+    linear-gradient(104deg,transparent 71%,rgba(90,70,50,.4) 71.3%,transparent 71.6%),
+    linear-gradient(33deg,transparent 12%,rgba(90,70,50,.35) 12.3%,transparent 12.6%),
+    radial-gradient(circle at 15% 85%,rgba(120,90,60,.5),transparent 30%),
+    radial-gradient(circle at 90% 10%,rgba(120,90,60,.4),transparent 25%)}
+.zoom{position:absolute;right:.4em;bottom:.4em;font-size:.9em;padding:.1em .35em;border-radius:.3em;background:rgba(0,0,0,.55);border:0;color:#fff;cursor:zoom-in;z-index:5}
+
+/* rarity frames */
+.r-common{--frame:#a9a49a}
+.r-bronze{--frame:linear-gradient(135deg,#7a4a20,#d39558 var(--mx),#6e421c)}
+.r-silver{--frame:linear-gradient(135deg,#8d939b,#ffffff var(--mx),#7d838c);--ho:.06}
+.r-gold{--frame:linear-gradient(135deg,#9c6d08,#fff0a8 var(--mx),#b8860b);--ho:.1}
+.r-plat{--frame:linear-gradient(135deg,#4aa8d8,#f2fdff var(--mx),#56b6e6);--ho:.16}
+.r-diamond{--frame:linear-gradient(135deg,#b9d7ee,#ffffff var(--mx),#9ec4e4)}
+.r-diamond .cbg{opacity:.85;mix-blend-mode:screen;filter:hue-rotate(calc(var(--h) * 1deg));
+  background:repeating-conic-gradient(from 10deg at var(--mx) var(--my),rgba(255,255,255,.95) 0 7deg,rgba(150,215,255,.55) 7deg 15deg,rgba(255,190,250,.55) 15deg 22deg,rgba(255,255,255,.2) 22deg 30deg)}
+.r-diamond .art{background:rgba(255,255,255,.85)}
+.r-rare{--frame:linear-gradient(135deg,#c9c3b5,#f6f2ea var(--mx),#bdb6a7);--ho:.12}
+.r-rare .cbg{opacity:.7;filter:hue-rotate(calc(var(--h) * 1deg)) saturate(1.4);
+  background:repeating-radial-gradient(circle at 50% 33%,#ff7773 0 5px,#ffed5f 5px 10px,#83fff7 10px 15px,#7894ff 15px 20px,#d875ff 20px 25px);
+  -webkit-mask-image:radial-gradient(circle at 50% 33%,#000 0 34%,transparent 35%);mask-image:radial-gradient(circle at 50% 33%,#000 0 34%,transparent 35%)}
+.r-rare .art{background:rgba(255,255,255,.18)}
+.r-epic{--frame:linear-gradient(115deg,#4c1d95,#c77dff,#7b2ff7,#f0c8ff,#5b21b6,#c77dff);--ho:.32}
+.r-epic .front{background-size:300% 300%;background-position:var(--mx) var(--my)}
+.r-legend{--frame:linear-gradient(115deg,#7f1d1d,#ff4d4d,#ffb199,#dc2626,#ffd0c2,#991b1b);--ho:.32}
+.r-legend .front{background-size:300% 300%;background-position:var(--mx) var(--my)}
+.r-event{--frame:linear-gradient(115deg,#ffd76a,#ff7773,#d875ff,#83fff7,#ffed5f,#ffd76a);--ho:.45}
+.r-event .front{background-size:300% 300%;background-position:var(--mx) var(--my)}
+.halo{position:absolute;inset:-22%;border-radius:50%;opacity:0;transform:translateZ(-2px);pointer-events:none;
+  background:conic-gradient(from 0deg,rgba(255,240,170,0),rgba(255,240,170,.85),rgba(255,240,170,0) 25%,rgba(255,200,255,.75) 45%,rgba(255,240,170,0) 60%,rgba(170,240,255,.8) 80%,rgba(255,240,170,0));
+  filter:blur(14px);animation:spin 6s linear infinite;transition:opacity 1s}
+.flipped .halo,.inspect .halo{opacity:1}
+@keyframes spin{to{rotate:360deg}}
+
+/* finishes */
+.f-sparkle .cbg::after{content:"";position:absolute;inset:0;opacity:.9;mix-blend-mode:screen;
+  background:
+    radial-gradient(circle,#fff 0 1px,transparent 1.6px) calc(var(--mx) * .3) calc(var(--my) * .3)/13px 13px,
+    radial-gradient(circle,#fff6b0 0 1px,transparent 1.8px) calc(var(--mx) * -.5) calc(var(--my) * .4)/21px 19px,
+    radial-gradient(circle,#b8f0ff 0 1.2px,transparent 2px) calc(var(--mx) * .6) calc(var(--my) * -.6)/29px 31px;
+  animation:twinkle 1.6s ease-in-out infinite alternate}
+@keyframes twinkle{from{opacity:.45}to{opacity:1}}
+.f-fullholo{--ho:.62!important}
+.f-black .frame{background:#0c0c0e;color:#f2f2f2;padding:.3em;border-radius:.45em}
+.f-black{--box:#0c0c0e}
+.f-black .top,.f-black .art,.f-black .desc,.f-black .meta{box-shadow:inset 0 0 0 1px rgba(255,255,255,.85)}
+.f-black .meta{color:#bbb}
+.f-black .top .mk{background:rgba(255,255,255,.12)}
+.f-black .art span{filter:brightness(0) invert(1);opacity:.92}
+.f-black .cbg{opacity:.25!important}
+
+/* 뒷면 상태에서 고등급 기운이 테두리 너머로 새어나옴 */
+@property --la{syntax:'<angle>';initial-value:0deg;inherits:false}
+.leak{position:absolute;inset:-8px;border-radius:1.3em;transform:translateZ(-1px);opacity:0;pointer-events:none;filter:blur(8px);transition:opacity .8s;
+  background:conic-gradient(from var(--la),var(--lk));animation:leakSpin 4s linear infinite,leakPulse 2.6s ease-in-out infinite}
+.slot.leaky:not(.flipped) .leak{opacity:1}
+.slot.leaky:not(.flipped) .back{box-shadow:0 6px 18px rgba(0,0,0,.45),inset 0 0 14px var(--lc)}
+@keyframes leakSpin{to{--la:360deg}}
+@keyframes leakPulse{0%,100%{filter:blur(8px) brightness(.8)}50%{filter:blur(11px) brightness(1.3)}}
+.lk-diamond{--lk:#bfefff,#ffffff,#c8b6ff,#9fe3ff,#ffffff,#bfefff;--lc:rgba(190,240,255,.8)}
+.lk-rare{--lk:#ff7773,#ffed5f,#a8ff5f,#83fff7,#7894ff,#d875ff,#ff7773;--lc:rgba(255,220,255,.8)}
+.lk-epic{--lk:#7b2ff7,#e0aaff,#5b21b6,#c77dff,#7b2ff7;--lc:rgba(200,130,255,.85)}
+.lk-legend{--lk:#ff2d2d,#ffb199,#b91c1c,#ff6b3d,#ff2d2d;--lc:rgba(255,110,90,.85)}
+.lk-event{--lk:#ffd76a,#fff6c8,#ff7773,#ffd76a,#83fff7,#d875ff,#ffd76a;--lc:rgba(255,225,120,.9)}
+
+/* price tags & keep */
+.tag{position:absolute;left:50%;bottom:-27px;translate:-50% 0 60px;white-space:nowrap;text-align:center;font-size:14px;font-weight:800;opacity:0;transition:opacity .3s;
+  padding:1px 7px;border-radius:8px;background:rgba(0,0,0,.55);color:#ffe9a8;font-variant-numeric:tabular-nums}
+.slot.flipped .tag{opacity:1}
+.tag.bump{animation:bump .32s ease-out}
+.tag.bump.mul{color:#ff8a80}
+.tag.bump.add{color:#8fd3ff}
+@keyframes bump{0%{transform:scale(1)}25%{transform:scale(1.45) rotate(-6deg)}50%{transform:scale(1.25) rotate(5deg)}75%{transform:scale(1.12) rotate(-2deg)}100%{transform:scale(1)}}
+.pop{position:absolute;left:50%;top:18%;translate:-50% 0 90px;font-weight:900;font-size:22px;pointer-events:none;z-index:20;white-space:nowrap;
+  padding:2px 9px;border-radius:9px;color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.35);animation:popUp .9s ease-out forwards}
+.pop.add{background:#2f7cf6}
+.pop.mul{background:#e5383b}
+@keyframes popUp{0%{transform:translateY(10px) scale(.4);opacity:0}18%{transform:translateY(0) scale(1.25);opacity:1}35%{transform:translateY(-6px) scale(1)}100%{transform:translateY(-58px) scale(.9);opacity:0}}
+.shaker.jiggle{animation:jiggle .3s ease-out}
+@keyframes jiggle{0%{transform:scale(1)}30%{transform:scale(1.1) rotate(-3deg)}60%{transform:scale(1.05) rotate(3deg)}100%{transform:scale(1)}}
+.keep-badge{position:absolute;top:-12px;left:50%;translate:-50% 0;background:#2bb673;color:#fff;font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;opacity:0;transition:opacity .2s;z-index:10}
+.slot.kept .keep-badge{opacity:1}
+.slot.kept .card{outline:3px solid #2bb673;outline-offset:3px;border-radius:.9em}
+
+/* flash */
+#flash{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:50;
+  background:radial-gradient(circle at 50% 50%,#fff 0%,var(--fc,#fff3c4) 45%,rgba(255,255,255,.9) 100%)}
+
+/* inspect */
+#modal{position:fixed;inset:0;background:rgba(5,6,10,.82);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:40;perspective:1600px}
+#modal.open{display:flex}
+#modal .holder{width:300px;height:420px;--cw:300px;--ch:420px;touch-action:none;cursor:grab;transform-style:preserve-3d}
+#modal .holder:active{cursor:grabbing}
+#modal .card{cursor:inherit}
+#modal .holder{position:relative;z-index:0}
+#modal .info,#modal .btns{position:relative;z-index:1}
+#modal .info{max-width:520px;padding:0 16px;font-size:13px;color:var(--muted);text-align:center;line-height:1.5}
+#modal .info b{color:var(--text)}
+#modal .btns{display:flex;gap:8px}
+
+/* storage */
+#storage{position:absolute;left:12px;top:10px;font-size:12px;color:var(--muted);max-width:240px;z-index:5}
+#storage span{display:inline-block;margin:2px 3px 0 0;padding:1px 6px;border:1px solid var(--line);border-radius:8px;color:var(--text)}
+
+@media (max-width:640px){
+  header{padding:8px 16px}
+  .stat{margin-left:0;width:100%}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>CARDPACK · 개봉 데모</h1>
+  <label>팩 <select id="packSel"><option value="1">기본팩</option><option value="2">고급팩</option><option value="4">프리미엄팩</option></select></label>
+  <label>등급 고정 <select id="forceR"></select></label>
+  <label>마감 고정 <select id="forceF"></select></label>
+  <div class="stat"><span>개봉 <b id="opened">0</b>팩</span><span>소지금 <b id="money">0</b>원</span></div>
+</header>
+<div id="stage">
+  <div id="storage"></div>
+  <div id="table"></div>
+</div>
+<footer id="bar"></footer>
+<canvas id="fx"></canvas>
+<div id="flash"></div>
+<div id="modal">
+  <div class="holder" id="holder"></div>
+  <div class="info" id="info"></div>
+  <div class="btns"><button id="mFlip">뒤집기</button><button id="mReset">정면</button><button class="primary" id="mClose">닫기</button></div>
+</div>
+
+<script>
+// ---------- data ----------
+// ap = 덧셈 능력 배수, mp = 배율 능력 강화 (×m → ×(1 + (m-1)×mp)). 등급이 높을수록 능력이 강해짐
+const R = [
+  {id:'common', name:'일반',     mark:'',       base:1,   p:40,  tier:0, ap:1,  mp:1},
+  {id:'bronze', name:'브론즈',   mark:'C',      base:2,   p:25,  tier:0, ap:1.5,mp:1.2},
+  {id:'silver', name:'실버',     mark:'B',      base:3,   p:17,  tier:0, ap:2,  mp:1.4},
+  {id:'gold',   name:'골드',     mark:'A',      base:6,   p:10,  tier:1, ap:3,  mp:1.6},
+  {id:'plat',   name:'플래티넘', mark:'P',      base:12,  p:4.5, tier:1, ap:5,  mp:2},
+  {id:'diamond',name:'다이아',   mark:'◆',      base:25,  p:2,   tier:2, ap:8,  mp:2.4},
+  {id:'rare',   name:'레어',     mark:'✪',      base:50,  p:1,   tier:2, ap:12, mp:3},
+  {id:'epic',   name:'에픽',     mark:'Epic',   base:100, p:.4,  tier:3, ap:20, mp:4},
+  {id:'legend', name:'레전드',   mark:'Legend', base:250, p:.1,  tier:3, ap:35, mp:6},
+  {id:'event',  name:'이벤트',   mark:'?',      base:1000,p:0,   tier:4, ap:20, mp:8},
+];
+const F = [
+  {id:'base',    name:'기본',          mult:1,  p:85},
+  {id:'sparkle', name:'반짝이 배경',   mult:2,  p:10},
+  {id:'fullholo',name:'전체 홀로그램', mult:5,  p:4},
+  {id:'black',   name:'블랙',          mult:12, p:1},
+];
+const W = [ // grade, name, short, mult, p
+  [10,'Factory New','FN',2,2],[9,'Mint','MT',1.5,5],[8,'Near Mint','NM',1.2,10],[7,'Excellent','EX',1,15],[6,'Good','GD',.9,18],
+  [5,'Fine','FI',.8,18],[4,'Played','PL',.65,14],[3,'Worn','WN',.5,10],[2,'Damaged','DM',.35,6],[1,'Shattered','SH',.2,2],
+].map(([g,name,short,mult,p])=>({g,name,short,mult,p}));
+// 능력 종류 (팩 안에서만 발동, 공개된 카드끼리만 적용)
+//  adjAdd/adjMul: 좌우 인접 카드 +N / ×N      tagAll: 같은 분류 카드 전부 +N (자신 포함)
+//  tagMult: 같은 분류 N장 이상이면 그 분류 ×N  sameRarity: 같은 등급의 다른 카드 +N
+//  dupe: 같은 카드가 더 있으면 1장당 자신 +N   perTag: 다른 같은 분류 카드 1장당 자신 +N
+//  lowAdd: 일반·브론즈 카드 전부 +N            highMul: 골드 이상 카드 전부 ×N     allAdd: 모든 카드 +N
+const POOL = [
+  {id:'apple',  name:'사과',   art:'🍎', tag:'과일', ab:{t:'tagAll',tag:'과일',add:1}},
+  {id:'orange', name:'귤',     art:'🍊', tag:'과일', ab:{t:'adjAdd',add:1}},
+  {id:'grape',  name:'포도',   art:'🍇', tag:'과일', ab:{t:'dupe',add:2}},
+  {id:'banana', name:'바나나', art:'🍌', tag:'과일', ab:{t:'perTag',tag:'과일',add:1}},
+  {id:'melon',  name:'수박',   art:'🍉', tag:'과일', ab:{t:'tagMult',tag:'과일',need:3,mult:1.5}},
+  {id:'mercury',name:'수성',   art:'🌑', tag:'행성', ab:{t:'adjMul',mult:1.2}},
+  {id:'venus',  name:'금성',   art:'🟠', tag:'행성', ab:{t:'sameRarity',add:2}},
+  {id:'earth',  name:'지구',   art:'🌍', tag:'행성', ab:{t:'tagAll',tag:'행성',add:2}},
+  {id:'mars',   name:'화성',   art:'🔴', tag:'행성', ab:{t:'adjAdd',add:2}},
+  {id:'jupiter',name:'목성',   art:'🪐', tag:'행성', ab:{t:'tagMult',tag:'행성',need:3,mult:2}},
+  {id:'cat',    name:'고양이', art:'🐱', tag:'동물', ab:{t:'dupe',add:2}},
+  {id:'dog',    name:'강아지', art:'🐶', tag:'동물', ab:{t:'tagAll',tag:'동물',add:1}},
+  {id:'fox',    name:'여우',   art:'🦊', tag:'동물', ab:{t:'adjMul',mult:1.5}},
+  {id:'panda',  name:'판다',   art:'🐼', tag:'동물', ab:{t:'lowAdd',add:1}},
+  {id:'whale',  name:'고래',   art:'🐋', tag:'동물', ab:{t:'tagMult',tag:'동물',need:3,mult:1.5}},
+  {id:'sword',  name:'검',     art:'🗡️', tag:'무기', ab:{t:'adjAdd',add:3}},
+  {id:'bow',    name:'활',     art:'🏹', tag:'무기', ab:{t:'perTag',tag:'무기',add:2}},
+  {id:'shield', name:'방패',   art:'🛡️', tag:'무기', ab:{t:'sameRarity',add:1}},
+  {id:'axe',    name:'도끼',   art:'🪓', tag:'무기', ab:{t:'highMul',mult:1.3}},
+  {id:'hammer', name:'망치',   art:'🔨', tag:'무기', ab:{t:'tagAll',tag:'무기',add:2}},
+];
+const EVENT_DEF = {id:'crown', name:'황금 왕관', art:'👑', tag:'이벤트', ab:{t:'allAdd',add:5}};
+const TIER_FX = [ // amp, shake ms, flip s, flash opacity, fade ms, glow, flash color
+  null,
+  {amp:'3px', sd:650,  fd:1.0, fo:.55, fade:700,  gc:'#ffd76a', fc:'#fff3c4'},
+  {amp:'5px', sd:950,  fd:1.4, fo:.78, fade:1000, gc:'#9fe3ff', fc:'#d8f4ff'},
+  {amp:'8px', sd:1250, fd:1.8, fo:.93, fade:1400, gc:'#ff6bd6', fc:'#ffd0f0'},
+  {amp:'11px',sd:1600, fd:2.3, fo:1,   fade:2100, gc:'#fff2a0', fc:'#fff6c8'},
+];
+
+// ---------- helpers ----------
+const $ = s => document.querySelector(s);
+const r1 = n => Math.round(n * 10) / 10;
+const fmt = n => (Number.isInteger(n) ? n : n.toFixed(1)) + '원';
+function pick(list, weight = x => x.p) {
+  const total = list.reduce((s, x) => s + weight(x), 0);
+  let r = Math.random() * total;
+  for (const x of list) { r -= weight(x); if (r <= 0) return x; }
+  return list[list.length - 1];
+}
+let skipFns = [], fast = false;
+function wait(ms) {
+  if (fast) ms = Math.min(ms, 120);
+  return new Promise(res => { const t = setTimeout(res, ms); skipFns.push(() => { clearTimeout(t); res(); }); });
+}
+function skip() { fast = true; const f = skipFns; skipFns = []; f.forEach(fn => fn()); }
+// 카드 등급에 맞게 강화된 실제 능력
+function abOf(c) {
+  const a = c.def.ab; if (!a) return null;
+  const o = {...a};
+  if (a.add) o.add = Math.ceil(a.add * c.r.ap);
+  if (a.mult) o.mult = r1(1 + (a.mult - 1) * c.r.mp);
+  return o;
+}
+function abText(ab) {
+  if (!ab) return '능력 없음';
+  if (ab.t === 'adjAdd') return `좌우 인접 카드 +${ab.add}원`;
+  if (ab.t === 'adjMul') return `좌우 인접 카드 ×${ab.mult}`;
+  if (ab.t === 'tagAll') return `팩 내 ${ab.tag} 카드 전부 +${ab.add}원`;
+  if (ab.t === 'tagMult') return `팩 내 ${ab.tag} ${ab.need}장 이상이면 ${ab.tag} 카드 ×${ab.mult}`;
+  if (ab.t === 'sameRarity') return `같은 등급의 다른 카드 +${ab.add}원`;
+  if (ab.t === 'dupe') return `같은 카드가 더 있으면 1장당 +${ab.add}원`;
+  if (ab.t === 'perTag') return `다른 ${ab.tag} 카드 1장당 +${ab.add}원`;
+  if (ab.t === 'lowAdd') return `일반·브론즈 카드 전부 +${ab.add}원`;
+  if (ab.t === 'highMul') return `골드 이상 카드 전부 ×${ab.mult}`;
+  if (ab.t === 'allAdd') return `팩 내 모든 카드 +${ab.add}원`;
+}
+function fxTier(c) {
+  let t = c.r.tier;
+  if (c.f.id === 'fullholo' || c.f.id === 'black') t = Math.max(t, 1);
+  return t;
+}
+
+// ---------- state ----------
+let state = 'pack', cards = [], slots = [], money = 0, opened = 0, busy = false, eventSeen = false, tearAt = 0;
+const storage = [];
+
+// ---------- roll ----------
+function rollCard(forcedR) {
+  const boost = +$('#packSel').value;
+  let r;
+  if (forcedR) r = R.find(x => x.id === forcedR);
+  else {
+    // 이벤트 카드는 한 판(런)에 1장만 — 데모에서는 페이지를 새로고침하면 초기화
+    if (!eventSeen && Math.random() < 0.0005 * boost) { r = R.find(x => x.id === 'event'); eventSeen = true; }
+    else {
+      const rare = R.filter(x => x.tier >= 1 && x.p > 0).reduce((s, x) => s + x.p, 0);
+      r = pick(R.filter(x => x.p > 0), x => x.tier >= 1 ? x.p * boost : x.id === 'common' ? Math.max(1, x.p - rare * (boost - 1)) : x.p);
+    }
+  }
+  const ff = $('#forceF').value;
+  const f = ff ? F.find(x => x.id === ff) : pick(F);
+  const w = pick(W);
+  const def = r.id === 'event' ? EVENT_DEF : POOL[Math.floor(Math.random() * POOL.length)];
+  return {def, r, f, w};
+}
+function rollPack() {
+  const fr = $('#forceR').value;
+  if (fr === 'mix') {
+    const ids = ['common','bronze','gold','silver','diamond','plat','epic','rare','legend'];
+    if (Math.random() < .5) ids[Math.floor(Math.random() * 9)] = 'event';
+    return ids.sort(() => Math.random() - .5).map(id => rollCard(id));
+  }
+  return Array.from({length: 9}, () => rollCard(fr || null));
+}
+
+// ---------- pricing ----------
+// 공개된 카드들 사이의 능력 기여 목록. 가격 = (기본가 + Σ덧셈) × Π배율 (발라트로식: 덧셈 먼저, 배율 나중)
+// 9장이 모두 공개된 시점의 결과가 확정 가격이 됨
+const baseOf = c => r1(c.r.base * c.f.mult * c.w.mult);
+function contributions(list, open) {
+  const out = [];
+  const idx = list.map((c, i) => i).filter(i => open[i]);
+  const push = (s, t, kind, val) => { if (val && !(kind === 'mul' && val === 1)) out.push({s, t, kind, val, key: `${s}>${t}:${kind}`}); };
+  for (const s of idx) {
+    const a = abOf(list[s]); if (!a) continue;
+    const src = list[s];
+    if (a.t === 'adjAdd' || a.t === 'adjMul') [s - 1, s + 1].filter(t => open[t]).forEach(t => a.t === 'adjAdd' ? push(s, t, 'add', a.add) : push(s, t, 'mul', a.mult));
+    if (a.t === 'tagAll') idx.filter(t => list[t].def.tag === a.tag).forEach(t => push(s, t, 'add', a.add));
+    if (a.t === 'tagMult') { const g = idx.filter(t => list[t].def.tag === a.tag); if (g.length >= a.need) g.forEach(t => push(s, t, 'mul', a.mult)); }
+    if (a.t === 'sameRarity') idx.filter(t => t !== s && list[t].r.id === src.r.id).forEach(t => push(s, t, 'add', a.add));
+    if (a.t === 'dupe') push(s, s, 'add', a.add * idx.filter(t => t !== s && list[t].def.id === src.def.id).length);
+    if (a.t === 'perTag') push(s, s, 'add', a.add * idx.filter(t => t !== s && list[t].def.tag === a.tag).length);
+    if (a.t === 'lowAdd') idx.filter(t => list[t].r.tier === 0 && ['common','bronze'].includes(list[t].r.id)).forEach(t => push(s, t, 'add', a.add));
+    if (a.t === 'highMul') idx.filter(t => list[t].r.tier >= 1).forEach(t => push(s, t, 'mul', a.mult));
+    if (a.t === 'allAdd') idx.forEach(t => push(s, t, 'add', a.add));
+  }
+  return out;
+}
+function applyPrices(list, contribs) {
+  list.forEach(c => { c.base = baseOf(c); c.add = 0; c.mul = 1; c.notes = []; });
+  for (const k of contribs) {
+    const c = list[k.t];
+    if (k.kind === 'add') c.add += k.val; else c.mul *= k.val;
+    c.notes.push(`${list[k.s].def.name} ${k.kind === 'add' ? '+' + k.val : '×' + k.val}`);
+  }
+  list.forEach(c => c.price = r1((c.base + c.add) * c.mul));
+}
+
+// ---------- render ----------
+function cardEl(c) {
+  const el = document.createElement('div');
+  el.className = `card r-${c.r.id} f-${c.f.id}`;
+  // 마모: 7등급 이상은 깨끗, 그 아래로 갈수록 흠집이 진해짐
+  el.style.setProperty('--wo', (c.w.g >= 7 ? 0 : (7 - c.w.g) / 6 * .8).toFixed(2));
+  el.innerHTML = `
+    ${c.r.id === 'event' ? '<div class="halo"></div>' : ''}${c.r.tier >= 2 ? '<div class="leak"></div>' : ''}
+    <div class="inner">
+      <div class="face back"><span>CARDPACK</span></div>
+      <div class="face front">
+        <div class="frame">
+          <div class="cbg"></div>
+          <div class="top"><span>${c.def.name}</span>${c.r.mark ? `<span class="mk">${c.r.mark}</span>` : ''}</div>
+          <div class="art"><span>${c.def.art}</span></div>
+          <div class="desc">${abText(abOf(c))}</div>
+          <div class="meta"><span>${c.r.name}${c.f.id !== 'base' ? ' · ' + c.f.name : ''}</span><span>${c.w.short} ${c.w.g}</span></div>
+        </div>
+        <div class="wear"></div><div class="holo"></div><div class="glare"></div>
+        <button class="zoom" title="자세히 보기">🔍</button>
+      </div>
+    </div>`;
+  return el;
+}
+function bindTilt(card) {
+  card.addEventListener('pointermove', e => {
+    if (!card.closest('.flipped')) return;
+    const b = card.getBoundingClientRect();
+    const px = (e.clientX - b.left) / b.width, py = (e.clientY - b.top) / b.height;
+    card.style.setProperty('--mx', (px * 100).toFixed(1) + '%');
+    card.style.setProperty('--my', (py * 100).toFixed(1) + '%');
+    card.style.setProperty('--h', (px * 360).toFixed(0));
+    card.style.setProperty('--ry', ((px - .5) * 24).toFixed(1) + 'deg');
+    card.style.setProperty('--rx', ((.5 - py) * 24).toFixed(1) + 'deg');
+  });
+  card.addEventListener('pointerleave', () => {
+    ['--mx','--my'].forEach(p => card.style.setProperty(p, '50%'));
+    card.style.setProperty('--rx', '0deg'); card.style.setProperty('--ry', '0deg');
+  });
+}
+
+function renderPack() {
+  const t = $('#table');
+  t.className = '';
+  t.innerHTML = `<div id="pack"><div class="beam"></div><div class="top"></div><div class="rip"></div><span class="grip">✂ 드래그해서 찢기</span>
+    <div class="body">CARDPACK<small>${$('#packSel').selectedOptions[0].text} · 9장</small></div></div>`;
+  bindPackDrag($('#pack'));
+  state = 'pack'; renderBar();
+}
+
+// 팩 찢기: 클릭 = 바로 개봉 / 드래그 = 진행도만큼 찢어짐, 덜 찢고 놓으면 다시 봉인 / 빠르게 잡아떼면 시원하게 찢어짐
+const TEAR_DONE = .65;   // 이만큼 찢고 놓으면 개봉
+const FLICK_V = 1.1;     // px/ms, 이보다 빠르게 떼면 "확 잡아뗌"
+function bindPackDrag(pack) {
+  const top = pack.querySelector('.top');
+  let d = null;
+  const setP = p => {
+    pack.style.setProperty('--p', p.toFixed(3));
+    top.style.transform = p ? `rotate(${-p * 32}deg) translate(${-p * 6}px,${-p * 18}px)` : '';
+    pack.style.transform = p ? `rotate(${-p * 2.5}deg) translateX(${(Math.random() - .5) * p * 3}px)` : '';
+  };
+  pack.addEventListener('pointerdown', e => {
+    if (state !== 'pack') return;
+    const now = performance.now();
+    d = {x: e.clientX, y: e.clientY, p: 0, lx: e.clientX, lt: now, v: 0, moved: false};
+    try { pack.setPointerCapture(e.pointerId); } catch {}
+  });
+  pack.addEventListener('pointermove', e => {
+    if (!d) return;
+    const dx = Math.abs(e.clientX - d.x);
+    if (!d.moved && dx < 6) return;
+    d.moved = true; pack.classList.add('dragging');
+    const now = performance.now();
+    const v = Math.abs(e.clientX - d.lx) / Math.max(1, now - d.lt);
+    d.v = d.v * .5 + v * .5; d.lx = e.clientX; d.lt = now;
+    d.p = Math.min(1, dx / (pack.getBoundingClientRect().width * 1.15));
+    setP(d.p);
+    if (d.p >= 1) { const hard = d.v > FLICK_V; d = null; pack.classList.remove('dragging'); tearPack(hard); }
+  });
+  const end = () => {
+    if (!d) return;
+    const {p, v, moved} = d; d = null;
+    pack.classList.remove('dragging');
+    if (!moved) { tearPack(false); return; }
+    if (v > FLICK_V && p > .15) tearPack(true);
+    else if (p >= TEAR_DONE) tearPack(false);
+    else setP(0); // 다시 봉인 (top에 스프링 transition)
+  };
+  pack.addEventListener('pointerup', end);
+  pack.addEventListener('pointercancel', end);
+}
+
+async function tearPack(hard) {
+  if (state !== 'pack') return;
+  state = 'tearing'; fast = false; tearAt = performance.now(); renderBar();
+  const pack = $('#pack'), top = pack.querySelector('.top');
+  top.style.transform = ''; pack.style.transform = '';
+  pack.style.setProperty('--p', 1);
+  pack.classList.add('torn');
+  if (hard) {
+    pack.classList.add('hard');
+    const b = pack.getBoundingClientRect();
+    burst(b.left + b.width / 2, b.top + 20, {n: 40, colors: ['#ffffff','#fff3b0','#ffd0f0'], speed: 7, life: 40, size: 2});
+    miniQuake();
+  }
+  cards = rollPack();
+  await wait(hard ? 280 : 450);
+  // 다이아 이상 카드가 들어 있으면 개봉 직후 이펙트
+  const maxT = Math.max(...cards.map(c => c.r.tier));
+  if (maxT >= 2) await hype(pack, maxT);
+  pack.classList.add('gone');
+  openMask = cards.map(() => false); curContribs = [];
+  const t = $('#table');
+  t.classList.add('fan');
+  slots = cards.map((c, i) => {
+    const s = document.createElement('div');
+    s.className = 'slot init' + (c.r.tier >= 2 ? ` leaky lk-${c.r.id}` : '');
+    const k = i - 4;
+    s.style.cssText = `--i:${i};--k:${k};--k2:${k * k};--gx:${((i < 5 ? i : i - 5) - (i < 5 ? 2 : 1.5)) * 160}px;--gy:${i < 5 ? -140 : 120}px`;
+    s.innerHTML = `<div class="shaker"></div><div class="tag"></div><div class="keep-badge">보관</div>`;
+    const card = cardEl(c);
+    s.querySelector('.shaker').appendChild(card);
+    bindTilt(card);
+    card.addEventListener('click', e => onCardClick(e, i));
+    card.querySelector('.zoom').addEventListener('click', e => { e.stopPropagation(); openInspect(i); });
+    card.addEventListener('dblclick', e => { e.preventDefault(); if (s.classList.contains('flipped')) openInspect(i); });
+    t.appendChild(s);
+    return s;
+  });
+  void t.offsetWidth;
+  slots.forEach((s, i) => { s.style.transitionDelay = i * 55 + 'ms'; s.classList.remove('init'); });
+  await wait(600 + 9 * 55);
+  slots.forEach(s => s.style.transitionDelay = '');
+  fast = false; skipFns = [];
+  state = 'reveal'; renderBar();
+}
+
+// ---------- fx: particles / fireworks / strobe ----------
+const fxc = $('#fx'), fx2 = fxc.getContext('2d');
+let parts = [], fxRunning = false;
+function burst(x, y, {n = 70, colors = ['#fff'], speed = 6, life = 70, size = 2.4, gravity = .08}) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, s = speed * (.35 + Math.random() * .75);
+    parts.push({x, y, px: x, py: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life, max: life, size: size * (.6 + Math.random() * .8),
+      c: colors[Math.floor(Math.random() * colors.length)], g: gravity});
+  }
+  if (!fxRunning) { fxRunning = true; requestAnimationFrame(fxLoop); }
+}
+function fxLoop() {
+  if (fxc.width !== innerWidth || fxc.height !== innerHeight) { fxc.width = innerWidth; fxc.height = innerHeight; }
+  fx2.clearRect(0, 0, fxc.width, fxc.height);
+  fx2.globalCompositeOperation = 'lighter';
+  parts = parts.filter(p => p.life > 0);
+  for (const p of parts) {
+    p.px = p.x; p.py = p.y;
+    p.vx *= .985; p.vy = p.vy * .985 + p.g;
+    p.x += p.vx; p.y += p.vy; p.life--;
+    const a = p.life / p.max;
+    fx2.strokeStyle = p.c; fx2.globalAlpha = a; fx2.lineWidth = p.size; fx2.lineCap = 'round';
+    fx2.beginPath(); fx2.moveTo(p.px - p.vx * 2, p.py - p.vy * 2); fx2.lineTo(p.x, p.y); fx2.stroke();
+  }
+  fx2.globalAlpha = 1;
+  if (parts.length) requestAnimationFrame(fxLoop); else { fxRunning = false; fx2.clearRect(0, 0, fxc.width, fxc.height); }
+}
+function miniQuake() { const st = $('#stage'); st.classList.remove('quake'); void st.offsetWidth; st.classList.add('quake'); }
+function pulse(opacity, color, fade) {
+  const el = $('#flash');
+  el.style.setProperty('--fc', color);
+  el.style.transition = 'none'; el.style.opacity = opacity; void el.offsetWidth;
+  el.style.transition = `opacity ${fade}ms ease-out`; el.style.opacity = 0;
+}
+const HYPE = { // 개봉 직후 이펙트 (최고 등급 tier 기준)
+  2: {dur: 1100, bursts: 3,  strobe: 0, rumble: false, ha: '2px', colors: ['#9fe3ff','#ffffff','#c9f0ff','#ffd0f0']},
+  3: {dur: 1900, bursts: 8,  strobe: 4, rumble: true,  ha: '4px', colors: ['#ff6bd6','#ffd76a','#9b5cff','#ff4d4d','#ffffff']},
+  4: {dur: 2700, bursts: 14, strobe: 7, rumble: true,  ha: '6px', colors: ['#ffd76a','#fff2a0','#ff7773','#83fff7','#d875ff','#a8ff5f','#ffffff']},
+};
+async function hype(pack, tier) {
+  const h = HYPE[tier], fx = TIER_FX[tier];
+  pack.style.setProperty('--hc', fx.gc); pack.style.setProperty('--ha', h.ha);
+  pack.classList.add('hype');
+  pulse(.7, fx.fc, 500);
+  const st = $('#stage');
+  if (h.rumble) st.classList.add('rumble');
+  const timers = [];
+  for (let i = 0; i < h.bursts; i++) {
+    timers.push(setTimeout(() => {
+      burst(innerWidth * (.12 + Math.random() * .76), innerHeight * (.12 + Math.random() * .45),
+        {n: 60 + tier * 15, colors: h.colors, speed: 4 + tier, life: 60 + tier * 8});
+    }, (h.dur * .85) * i / h.bursts));
+  }
+  for (let i = 0; i < h.strobe; i++) timers.push(setTimeout(() => pulse(.55, i % 2 ? '#ffffff' : fx.fc, 140), 250 + i * (h.dur * .7 / h.strobe)));
+  skipFns.push(() => timers.forEach(clearTimeout));
+  await wait(h.dur);
+  timers.forEach(clearTimeout);
+  st.classList.remove('rumble');
+  pack.classList.remove('hype');
+  pulse(fx.fo, fx.fc, fast ? 200 : fx.fade);
+}
+
+function flash(tier) {
+  const fx = TIER_FX[tier], el = $('#flash');
+  el.style.setProperty('--fc', fx.fc);
+  el.style.transition = 'none'; el.style.opacity = fx.fo; void el.offsetWidth;
+  el.style.transition = `opacity ${fast ? 200 : fx.fade}ms ease-out`; el.style.opacity = 0;
+  if (tier >= 3) { const st = $('#stage'); st.classList.remove('quake'); void st.offsetWidth; st.classList.add('quake'); }
+}
+
+async function flipOne(i) {
+  const s = slots[i];
+  if (s.classList.contains('flipped') || s.dataset.flipping) return;
+  s.dataset.flipping = 1;
+  const tier = fxTier(cards[i]);
+  const inner = s.querySelector('.inner');
+  if (tier === 0) {
+    inner.style.setProperty('--fd', '.5s');
+    s.classList.add('flipped');
+    await wait(500);
+  } else {
+    const fx = TIER_FX[tier], sh = s.querySelector('.shaker');
+    sh.style.setProperty('--amp', fx.amp); sh.style.setProperty('--sd', fx.sd + 'ms'); sh.style.setProperty('--gc', fx.gc);
+    if (!fast) { sh.classList.add('shake'); await wait(fx.sd); sh.classList.remove('shake'); }
+    const fd = fast ? .3 : fx.fd;
+    inner.style.setProperty('--fd', fd + 's');
+    s.classList.add('flipped');
+    await wait(fd * 500);
+    flash(tier);
+    await wait(fd * 500 + (fast ? 0 : 250));
+  }
+  delete s.dataset.flipping;
+}
+
+// ---------- 계산 연출 (발라트로식) ----------
+// 카드가 공개될 때마다 공개된 카드들 사이의 능력을 다시 계산하고, 새로 생기거나 바뀐 기여만 순서대로 보여줌:
+// 능력을 가진 카드가 들썩 → 대상 카드 위에 +N(파랑) / ×N(빨강)이 떠오르고 → 대상 가격표가 떨리며 갱신
+let openMask = [], curContribs = [];
+function setTag(i, price, kind) {
+  const tag = slots[i].querySelector('.tag');
+  tag.textContent = fmt(price);
+  if (kind) {
+    tag.classList.remove('bump', 'add', 'mul'); void tag.offsetWidth; tag.classList.add('bump', kind);
+    clearTimeout(tag._t); tag._t = setTimeout(() => tag.classList.remove('bump', 'add', 'mul'), 450);
+  }
+}
+function popAt(i, text, kind) {
+  const p = document.createElement('div');
+  p.className = `pop ${kind}`; p.textContent = text;
+  slots[i].appendChild(p);
+  setTimeout(() => p.remove(), 950);
+}
+function jiggle(i) { const sh = slots[i].querySelector('.shaker'); sh.classList.remove('jiggle'); void sh.offsetWidth; sh.classList.add('jiggle'); }
+async function score(newIdx) {
+  newIdx.forEach(i => openMask[i] = true);
+  const prev = new Map(curContribs.map(k => [k.key, k]));
+  const next = contributions(cards, openMask);
+  const disp = cards.map(c => ({base: baseOf(c), add: 0, mul: 1}));
+  for (const k of curContribs) { if (k.kind === 'add') disp[k.t].add += k.val; else disp[k.t].mul *= k.val; }
+  const price = i => r1((disp[i].base + disp[i].add) * disp[i].mul);
+  newIdx.forEach(i => setTag(i, price(i), null));
+  if (!fast) await wait(newIdx.length > 1 ? 300 : 200);
+  const evs = [];
+  for (const k of next) {
+    const o = prev.get(k.key);
+    if (!o) evs.push({...k, d: k.val});
+    else if (o.val !== k.val) evs.push({...k, d: k.kind === 'add' ? k.val - o.val : k.val / o.val});
+  }
+  evs.sort((a, b) => a.s - b.s || a.t - b.t);
+  const step = newIdx.length > 1 ? 170 : 260;
+  let lastS = -1;
+  for (const e of evs) {
+    if (e.s !== lastS) { lastS = e.s; if (!fast) { jiggle(e.s); await wait(150); } }
+    if (e.kind === 'add') disp[e.t].add += e.d; else disp[e.t].mul *= e.d;
+    if (!fast) popAt(e.t, e.kind === 'add' ? `+${r1(e.d)}` : `×${r1(e.d)}`, e.kind);
+    setTag(e.t, price(e.t), fast ? null : e.kind);
+    if (!fast) await wait(step);
+  }
+  curContribs = next;
+  applyPrices(cards, next);
+  cards.forEach((c, i) => { if (openMask[i]) setTag(i, c.price, null); });
+}
+
+async function run(task) {
+  if (busy) return;
+  busy = true; fast = false; renderBar();
+  await task();
+  busy = false; fast = false; skipFns = [];
+  if (slots.every(s => s.classList.contains('flipped'))) await settle(); else renderBar();
+}
+
+function onCardClick(e, i) {
+  if (busy) { skip(); return; }
+  if (state === 'reveal') {
+    if (slots[i].classList.contains('flipped')) openInspect(i);
+    else run(async () => { await flipOne(i); await score([i]); });
+  } else if (state === 'settle') {
+    slots[i].classList.toggle('kept'); renderBar();
+  }
+}
+
+function flipAll() {
+  run(async () => {
+    const pending = slots.map((s, i) => i).filter(i => !slots[i].classList.contains('flipped'));
+    const low = pending.filter(i => fxTier(cards[i]) === 0);
+    const high = pending.filter(i => fxTier(cards[i]) > 0).sort((a, b) => fxTier(cards[a]) - fxTier(cards[b]));
+    low.forEach((i, n) => setTimeout(() => flipOne(i), n * 70));
+    if (low.length) { await wait(low.length * 70 + 550); await score(low); }
+    for (const i of high) { await flipOne(i); await score([i]); }
+  });
+}
+
+async function settle() {
+  state = 'settling'; renderBar();
+  applyPrices(cards, curContribs); // 9장 공개 시점의 결과로 가격 확정
+  cards.forEach((c, i) => setTag(i, c.price, null));
+  await wait(500);
+  const t = $('#table'); t.classList.remove('fan'); t.classList.add('grid');
+  await wait(600);
+  state = 'settle'; renderBar();
+}
+
+function sell(all) {
+  let sum = 0, kept = 0;
+  slots.forEach((s, i) => {
+    if (!all && s.classList.contains('kept')) { storage.push(cards[i]); kept++; }
+    else sum += cards[i].price;
+  });
+  money = r1(money + sum); opened++;
+  $('#money').textContent = money; $('#opened').textContent = opened;
+  renderStorage();
+  state = 'done';
+  $('#bar').innerHTML = `<span><b>${fmt(r1(sum))}</b> 판매${kept ? ` · ${kept}장 보관` : ''}</span><button class="primary" id="next">다음 팩</button>`;
+  $('#next').onclick = renderPack;
+}
+
+function renderStorage() {
+  $('#storage').innerHTML = storage.length
+    ? `보관함 ${storage.length}/100<br>` + storage.map(c => `<span title="${c.r.name} · ${c.f.name} · ${c.w.name} · ${fmt(c.price)}">${c.def.art} ${c.def.name}</span>`).join('')
+    : '';
+}
+
+function renderBar() {
+  const b = $('#bar');
+  if (state === 'pack') b.innerHTML = `<span class="hint">팩을 클릭하거나, 잡고 옆으로 드래그해서 찢으세요 · 덜 찢고 놓으면 다시 봉인 · 빠르게 잡아떼면 확!</span>`;
+  else if (state === 'tearing') b.innerHTML = `<span class="hint">… (클릭하면 스킵)</span>`;
+  else if (state === 'settling') b.innerHTML = `<span class="hint">…</span>`;
+  else if (state === 'reveal') {
+    b.innerHTML = `<button class="primary" id="all" ${busy ? 'disabled' : ''}>모두 뒤집기</button>
+      <span class="hint">${busy ? '연출 중 · 카드를 클릭하면 스킵' : '카드를 클릭하면 한 장씩 뒤집힘 · 뒤집힌 카드 클릭/🔍 = 자세히 보기'}</span>`;
+    if (!busy) $('#all').onclick = flipAll;
+  } else if (state === 'settle') {
+    const keep = slots.filter(s => s.classList.contains('kept')).length;
+    const all = r1(cards.reduce((s, c) => s + c.price, 0));
+    const part = r1(cards.reduce((s, c, i) => s + (slots[i].classList.contains('kept') ? 0 : c.price), 0));
+    b.innerHTML = `<span class="hint">가격 확정 · 카드를 클릭하면 판매 제외(보관)</span>
+      <button id="sellAll">일괄 판매 (9장 · ${fmt(all)})</button>
+      <button class="primary" id="sellPart" ${keep ? '' : 'disabled'}>선택 제외 후 판매 (${9 - keep}장 · ${fmt(part)}, ${keep}장 보관)</button>`;
+    $('#sellAll').onclick = () => sell(true);
+    $('#sellPart').onclick = () => sell(false);
+  }
+}
+
+// ---------- inspect modal ----------
+let insp = null;
+function openInspect(i) {
+  const c = cards[i];
+  const holder = $('#holder');
+  holder.innerHTML = '';
+  const el = cardEl(c);
+  el.classList.add('inspect', 'flipped');
+  el.querySelector('.zoom').remove();
+  holder.appendChild(el);
+  insp = {el, rx: 0, ry: 0, drag: null};
+  applyInsp(false);
+  const locked = openMask.every(Boolean);
+  $('#info').innerHTML = `<b>${c.def.art} ${c.def.name}</b> · ${c.def.tag} · ${c.r.name}${c.r.mark ? ` (${c.r.mark})` : ''} · ${c.f.name} · ${c.w.name} (${c.w.g})<br>` +
+    `기본가 ${c.r.base} × 마감 ${c.f.mult} × 마모 ${c.w.mult} = ${fmt(c.base)}${c.notes.length ? ' → ' + c.notes.join(', ') : ''} → <b>${fmt(c.price)}</b>` +
+    (locked ? ' (확정)' : ' (현재 · 9장 모두 공개 시 확정)') +
+    `<br>${abText(abOf(c))}${c.def.ab && c.r.ap > 1 ? ` <span style="opacity:.7">(${c.r.name} 등급 보정: 기본 「${abText(c.def.ab)}」)</span>` : ''}<br>드래그해서 돌려보기 · 휠로 확대`;
+  $('#modal').classList.add('open');
+}
+function applyInsp(anim) {
+  const {el, rx, ry} = insp;
+  el.style.transition = anim ? 'transform .6s cubic-bezier(.3,.7,.2,1)' : 'none';
+  el.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg) scale(${insp.z || 1})`;
+  const n = ((ry % 360) + 540) % 360 - 180; // -180..180
+  const facing = Math.max(-90, Math.min(90, n));
+  el.style.setProperty('--mx', (50 + facing / 90 * 50).toFixed(1) + '%');
+  el.style.setProperty('--my', (50 - rx / 60 * 50).toFixed(1) + '%');
+  el.style.setProperty('--h', ((ry + rx) * 2).toFixed(0));
+}
+const holder = $('#holder');
+holder.addEventListener('pointerdown', e => { if (!insp) return; insp.drag = {x: e.clientX, y: e.clientY}; holder.setPointerCapture(e.pointerId); });
+holder.addEventListener('pointermove', e => {
+  if (!insp || !insp.drag) return;
+  insp.ry += (e.clientX - insp.drag.x) * .6;
+  insp.rx = Math.max(-60, Math.min(60, insp.rx - (e.clientY - insp.drag.y) * .5));
+  insp.drag = {x: e.clientX, y: e.clientY};
+  applyInsp(false);
+});
+holder.addEventListener('pointerup', () => { if (insp) insp.drag = null; });
+holder.addEventListener('wheel', e => { if (!insp) return; e.preventDefault(); insp.z = Math.max(.6, Math.min(1.6, (insp.z || 1) - e.deltaY * .001)); applyInsp(false); }, {passive: false});
+$('#mFlip').onclick = () => { insp.ry += 180; applyInsp(true); };
+$('#mReset').onclick = () => { insp.rx = 0; insp.ry = Math.round(insp.ry / 360) * 360; insp.z = 1; applyInsp(true); };
+$('#mClose').onclick = () => { $('#modal').classList.remove('open'); insp = null; };
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') $('#mClose').click(); });
+
+// ---------- setup ----------
+$('#forceR').innerHTML = `<option value="">무작위</option><option value="mix">연출 테스트 (등급 섞기)</option>` + R.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+$('#forceF').innerHTML = `<option value="">무작위</option>` + F.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+$('#packSel').onchange = () => { if (state === 'pack') renderPack(); };
+// 개봉 이펙트 스킵 (팩을 놓는 순간의 click은 무시)
+$('#stage').addEventListener('click', () => { if (state === 'tearing' && performance.now() - tearAt > 300) skip(); });
+function fit() {
+  const st = $('#stage');
+  const s = Math.min(1, (st.clientWidth - 16) / 820, (st.clientHeight - 10) / 540);
+  $('#table').style.transform = `scale(${s})`;
+}
+addEventListener('resize', fit);
+fit();
+renderPack();
+</script>
+</body>
+</html>
