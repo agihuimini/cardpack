@@ -107,6 +107,8 @@ function showOpening() {
 }
 function closeOpening() {
   $('#opening').hidden = true;
+  $('#table').innerHTML = ''; slots = []; cards = [];
+  $('#settleList').innerHTML = '';
   packInfo(false);
   document.body.style.overflow = '';
   state = 'idle';
@@ -228,6 +230,13 @@ function snapBack(i) { const s = slots[i]; if (s) { s.style.translate = ''; s.st
 function showDone(res, extra) {
   say(res);
   persist();
+  // 남은 팩이 없으면(마지막 팩) 카드 잔상 없이 개봉 모드를 끝내고 상점으로
+  if (!game.unopened.length) {
+    msg = (extra ? extra + ' · ' : '') + res.msg + (res.unlocked && res.unlocked.length ? '\n🔓 해금: ' + res.unlocked.join(', ') : '');
+    state = 'done';
+    setTimeout(closeOpening, 380); // 마지막으로 끌어낸 카드가 빠져나가는 애니메이션만 보여 주고 닫음
+    return;
+  }
   state = 'done';
   $('#settleList').innerHTML = '';
   updateOpeningHeader();
