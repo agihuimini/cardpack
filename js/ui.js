@@ -11,7 +11,7 @@ let game = null;
 let meta = Object.assign(GM.newMeta(), SV.loadMeta() || {});
 GM.refreshMeta(meta);
 let screen = 'menu', msg = '', keptBefore = new Set(), showSettle = false;
-let bookPage = 0, bookTurn = '', selUid = null;
+let bookPage = 0, bookTurn = '', selUid = null, bookOpen = false;
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const won = n => (Math.round(n * 10) / 10).toLocaleString('ko-KR') + '원';
@@ -20,6 +20,7 @@ const btn = (label, act, arg, disabled, cls) =>
 const RNAME = {}; R.forEach(r => RNAME[r.id] = r);
 const DES_PAGES = Math.ceil(DT.ROWS.length / DT.ROWS_PER_PAGE);
 const FREE_PAGES = Math.ceil(DT.FREE_SLOTS / DT.FREE_PER_PAGE);
+const VAULT_PAGE = DES_PAGES + FREE_PAGES; // 도감 마지막 페이지 = 팩보관함
 
 function persist() {
   SV.saveMeta(meta);
@@ -39,12 +40,30 @@ function renderPack() {
   const t = $('#table');
   t.className = '';
   const op = game.opening;
-  t.innerHTML = `<div id="pack"><div class="beam"></div><div class="top"></div><div class="rip"></div><span class="grip">✂ 드래그해서 찢기</span>
+  const look = packLook(op.k);
+  t.innerHTML = `<div id="pack" class="${look.cls}" style="--hue:${look.hue}"><div class="beam"></div><div class="top"></div><div class="rip"></div><span class="grip">✂ 드래그해서 찢기</span>
     <div class="body">CARDPACK<small>${DT.PACKS[op.k].name}${op.single ? ' 낱개' : ''} · ${op.cards.length}장</small></div></div>`;
   bindPackDrag($('#pack'));
   $('#settleList').innerHTML = '';
   keptBefore = new Set();
   state = 'pack'; renderBar();
+  renderRemain();
+}
+// 개봉 화면 왼쪽 아래: 아직 열 수 있는 남은 팩 (없으면 점선 가상 팩)
+function renderRemain() {
+  const list = game.unopened;
+  const thumbs = list.slice(0, 10).map(pk => { const l = packLook(pk.k); return `<div class="pk mini ${l.cls}" style="--hue:${l.hue}" title="${esc(DT.PACKS[pk.k].name)}"><div class="pk-top"></div></div>`; }).join('');
+  $('#remainPacks').innerHTML = list.length
+    ? `<div class="rp-label">남은 팩 ${list.length}</div><div class="rp-row">${thumbs}${list.length > 10 ? `<span class="rp-more">+${list.length - 10}</span>` : ''}</div>`
+    : `<div class="rp-label">남은 팩 0</div><div class="rp-row"><div class="pk mini ghost"><span>남은 팩<br>없음</span></div></div>`;
+}
+function afterKeep() {
+  const r = GM.keepSealed(game);
+  if (!r.ok) { $('#bar').insertAdjacentHTML('afterbegin', `<b style="color:var(--bad)">${esc(r.msg)}</b>`); return; }
+  persist();
+  msg = r.msg;
+  if (game.unopened.length) { GM.startOpening(game, meta, 0); persist(); updateOpeningHeader(); renderPack(); }
+  else closeOpening();
 }
 function updateOpeningHeader() {
   const m = GM.mods(game);
@@ -72,7 +91,12 @@ function keptIdx() { return slots.map((s, i) => s.classList.contains('kept') ? i
 function renderBar() {
   const b = $('#bar');
   const n = cards.length;
-  if (state === 'pack') b.innerHTML = `<span class="hint">팩을 클릭하거나, 잡고 옆으로 드래그해서 찢으세요 · 덜 찢고 놓으면 다시 봉인 · 빠르게 잡아떼면 확!</span>`;
+  if (state === 'pack') {
+    const canKeep = game.opening && game.opening.k !== 'contest';
+    b.innerHTML = `<span class="hint">팩을 클릭하거나, 잡고 옆으로 드래그해서 찢으세요 · 덜 찢고 놓으면 다시 봉인 · 빠르게 잡아떼면 확!</span>
+      ${canKeep ? `<button id="keepSealed" ${(game.vault || []).length >= DT.VAULT_MAX ? 'disabled' : ''}>📦 뜯지 않고 팩째로 보관 (팩보관함 ${(game.vault || []).length}/${DT.VAULT_MAX})</button>` : ''}`;
+    if (canKeep) $('#keepSealed').onclick = afterKeep;
+  }
   else if (state === 'tearing') b.innerHTML = `<span class="hint">… (클릭하면 스킵)</span>`;
   else if (state === 'settling') b.innerHTML = `<span class="hint">…</span>`;
   else if (state === 'reveal') {
@@ -120,6 +144,7 @@ function sell(all) {
   state = 'done';
   $('#settleList').innerHTML = '';
   updateOpeningHeader();
+  renderRemain();
   const b = $('#bar');
   b.innerHTML = `<span>${esc(res.msg)}</span>
     ${game.unopened.length ? `<button class="primary" id="nextPack">다음 팩 열기 (남은 ${game.unopened.length})</button>` : ''}<button id="toShop">${game.contest ? '대회장으로' : GM.isBazaar(game) ? '바자회로' : '상점으로'}</button>`;
@@ -243,32 +268,56 @@ function renderRight() {
 }
 
 // ---------- 가운데: 팩 / 바자회 / 대회 ----------
+// ---------- 카드팩 이미지 ----------
+const TAG_HUE = { 과일: 350, 행성: 220, 동물: 30, 무기: 0, 보석: 175, 날씨: 200, 탈것: 120, 악기: 280 };
+function packLook(k) {
+  if (k.startsWith('tag_')) return { cls: 'pk-tag', hue: TAG_HUE[k.slice(4)] };
+  return { cls: 'pk-' + k, hue: 0 };
+}
+// 팩 이미지 버튼. 누르면 act(arg) 실행 (구매 → 바로 개봉, 또는 미개봉 팩 개봉)
+function packImg(k, o) {
+  const p = DT.PACKS[k], look = packLook(k);
+  return `<button class="pkbtn" data-act="${o.act}" data-arg="${esc(o.arg)}"${o.disabled ? ' disabled' : ''} title="${esc(o.why || p.desc || p.name)}">
+    <div class="pk ${look.cls}${o.bundle ? ' bundle' : ''}" style="--hue:${look.hue}">
+      <div class="pk-top"></div>
+      <div class="pk-body"><span class="pk-logo">CARDPACK</span><b>${esc(p.name)}</b>${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</div>
+      ${o.bundle ? '<span class="pk-x">×5</span>' : ''}${o.badge ? `<span class="pk-badge">${o.badge}</span>` : ''}
+    </div>
+    <div class="pk-price">${o.price}</div></button>`;
+}
 function renderPacks(m) {
   const left = GM.maxPacks(game, m) - game.packsBought;
   const avail = GM.availablePacks(game, meta);
-  const base = ['basic', 'advanced', 'premium'].filter(k => avail.includes(k)).map(k => {
+  const why = (price, need) => game.money < price ? '돈이 부족합니다' : left < need ? `오늘은 ${left}팩만 더 살 수 있습니다` : '';
+  const tiles = [];
+  for (const k of ['basic', 'advanced', 'premium'].filter(k => avail.includes(k))) {
     const p = DT.PACKS[k];
-    const pb = GM.packPrice(game, k, 'bundle', m), ps = GM.packPrice(game, k, 'single', m);
-    return `<tr><td>${p.name} <span class="muted">골드 이상 ×${p.boost}</span></td>
-      <td>${btn(won(pb) + ' (5팩)', 'buyPack', k + ':bundle', game.money < pb || left < 5)}</td>
-      <td>${btn(won(ps), 'buyPack', k + ':single', game.money < ps || left < 1)}</td></tr>`;
-  }).join('');
+    const ps = GM.packPrice(game, k, 'single', m), pb = GM.packPrice(game, k, 'bundle', m);
+    tiles.push(packImg(k, { act: 'buyPack', arg: k + ':single', price: won(ps), sub: `낱개 · 골드↑ ×${p.boost}`, disabled: !!why(ps, 1), why: why(ps, 1) || `낱개 구매 (골드 이상 확률 ×${(1 + DT.SINGLE_BONUS + m.single).toFixed(1)})` }));
+    tiles.push(packImg(k, { act: 'buyPack', arg: k + ':bundle', bundle: true, price: won(pb) + ' · 5팩', sub: '5팩 묶음 할인', disabled: !!why(pb, 5), why: why(pb, 5) || '5팩 묶음 (할인)' }));
+  }
   const themes = game.shop.themes.map(k => {
     const p = DT.PACKS[k], price = GM.packPrice(game, k, 'single', m), st = game.shop.stock[k];
-    return `<div class="tpack"><div class="tp-name">${esc(p.name)}</div><small>${esc(p.desc)} · ${p.pool ? p.pool.length + '종' : '전 카드'}</small>
-      ${btn(`${won(price)} <span class="muted">남은 ${st}</span>`, 'buyPack', k + ':single', game.money < price || left < 1 || st <= 0)}</div>`;
+    const w = st <= 0 ? '품절' : why(price, 1);
+    return packImg(k, { act: 'buyPack', arg: k + ':single', price: won(price), sub: p.desc, badge: '남은 ' + st, disabled: !!w, why: w || p.desc });
   }).join('');
-  return `<h2>📦 팩 <small>오늘 ${game.packsBought}/${GM.maxPacks(game, m)}팩 구매 · ${DT.PACK_SIZE}장 들이</small></h2>
-    <div class="box"><div class="wrap"><table><tr><th>팩</th><th>5팩 묶음 (할인)</th><th>낱개 (골드 이상 ×${(1 + DT.SINGLE_BONUS + m.single).toFixed(1)})</th></tr>${base}</table></div>
-    ${themes ? `<div class="muted" style="margin:8px 0 4px">✨ 오늘의 특수 팩 (랜덤 등장, 낱개만)</div><div class="tpacks">${themes}</div>` : ''}</div>`;
+  return `<h2>📦 카드팩 진열대 <small>팩을 누르면 구매하고 바로 개봉 · 오늘 ${game.packsBought}/${GM.maxPacks(game, m)}팩 · ${DT.PACK_SIZE}장 들이</small></h2>
+    <div class="shelf">${tiles.join('')}</div>
+    ${themes ? `<h2>✨ 오늘의 특수 팩 <small>랜덤 등장 · 낱개만 · 재고 2</small></h2><div class="shelf special">${themes}</div>` : ''}`;
+}
+function renderUnopened() {
+  if (!game.unopened.length) return '';
+  const tiles = game.unopened.map((pk, i) => packImg(pk.k, { act: 'open', arg: i, price: '열기', sub: pk.k === 'contest' ? '대회용' : pk.single ? '낱개' : '묶음' })).join('');
+  return `<h2>📭 미개봉 팩 <small>누르면 개봉 · 한 번에 1팩씩</small></h2><div class="shelf">${tiles}</div>`;
 }
 function renderBazaarCorner(m) {
   const sh = game.shop;
   const specials = Object.keys(sh.stock).map(k => {
     const p = DT.PACKS[k], price = GM.packPrice(game, k, 'single', m);
-    return `<div class="tpack"><div class="tp-name">${esc(p.name)}</div><small>${esc(p.desc)}</small>${btn(`${won(price)} <span class="muted">남은 ${sh.stock[k]}</span>`, 'buyPack', k + ':single', game.money < price || sh.stock[k] <= 0)}</div>`;
+    const w = sh.stock[k] <= 0 ? '품절' : game.money < price ? '돈이 부족합니다' : '';
+    return packImg(k, { act: 'buyPack', arg: k + ':single', price: won(price), sub: p.desc, badge: '남은 ' + sh.stock[k], disabled: !!w, why: w || p.desc });
   }).join('');
-  let html = `<div class="corner"><h3>🃏 카드 코너 <span class="muted">→ 도감 일반카드 칸</span></h3><div class="tpacks">${specials}</div>
+  let html = `<div class="corner"><h3>🃏 카드 코너 <span class="muted">→ 도감 일반카드 칸</span></h3><div class="shelf">${specials}</div>
     <div class="muted" style="margin-top:8px">특수카드 단품</div><div class="minis">${sh.singles.length ? sh.singles.map((o, i) => mini(o.card, btn('구매 ' + won(o.price), 'buySingle', i, game.money < o.price))).join('') : '<span class="muted">품절</span>'}</div>`;
   sh.npcs.forEach((n, ni) => { html += `<div class="box">${renderNpc(n, ni)}</div>`; });
   return html + '</div>';
@@ -302,9 +351,10 @@ function binderCard(s) {
   return wrap;
 }
 function renderBook() {
-  const total = DES_PAGES + FREE_PAGES;
+  const total = DES_PAGES + FREE_PAGES + 1;
   bookPage = Math.max(0, Math.min(total - 1, bookPage));
-  const isDes = bookPage < DES_PAGES;
+  const isDes = bookPage < DES_PAGES, isVault = bookPage === VAULT_PAGE;
+  const vault = game.vault || [];
   const done = GM.completedRows(game).map(r => r.name);
   let body = '';
   if (isDes) {
@@ -315,6 +365,10 @@ function renderBook() {
         const s = game.binder.des[id], seen = meta.album[id] && meta.album[id].s;
         return `<div class="bslot${s ? ' has' : ''}${s && s.u === selUid ? ' sel' : ''}" data-uid="${s ? s.u : ''}"><span class="no">No.${no}</span><span class="ghost">${seen ? DT.DEFS[id].art + '<br>' + esc(DT.DEFS[id].name) : '???'}</span></div>`;
       }).join('') + '</div></div>').join('');
+  } else if (isVault) {
+    const tiles = vault.map((v, i) => packImg(v.k, { act: 'openVault', arg: i, price: '개봉', sub: (v.single ? '낱개' : '묶음') + ' · ' + v.day + '일차 보관' }));
+    for (let i = vault.length; i < DT.VAULT_MAX; i++) tiles.push('<div class="vslot"><span>빈 칸</span></div>');
+    body = `<p class="muted" style="margin:0 0 10px">뜯지 않고 보관한 팩. 안의 카드는 이미 정해져 있습니다. 누르면 바로 개봉.</p><div class="vgrid">${tiles.join('')}</div>`;
   } else {
     const p = bookPage - DES_PAGES;
     const cells = [];
@@ -324,16 +378,17 @@ function renderBook() {
     }
     body = `<div class="bcells free">${cells.join('')}</div>`;
   }
-  const title = isDes ? `지정카드 ${bookPage + 1}/${DES_PAGES}` : `일반카드 ${bookPage - DES_PAGES + 1}/${FREE_PAGES}`;
-  const tabs = [...Array(total).keys()].map(i => `<button class="tab${i === bookPage ? ' on' : ''}" data-act="page" data-arg="${i}">${i < DES_PAGES ? '지정' + (i + 1) : '일반' + (i - DES_PAGES + 1)}</button>`).join('');
-  return `<h2>📖 도감 <small>지정카드 ${Object.keys(game.binder.des).length}/${DT.DESIGNATED.length} · 일반카드 ${DT.FREE_SLOTS - GM.freeRoom(game)}/${DT.FREE_SLOTS} · 완성 가로줄 ${done.length}줄 → 전체 점수 ×${GM.scoreMult(game)}</small></h2>
+  const title = isDes ? `지정카드 ${bookPage + 1}/${DES_PAGES}` : isVault ? `팩보관함 ${vault.length}/${DT.VAULT_MAX}` : `일반카드 ${bookPage - DES_PAGES + 1}/${FREE_PAGES}`;
+  return `<div class="bmodal"><div class="bpanel">
+    <div class="bhead"><div><b>📖 도감</b> <span class="muted">지정카드 ${Object.keys(game.binder.des).length}/${DT.DESIGNATED.length} · 일반카드 ${DT.FREE_SLOTS - GM.freeRoom(game)}/${DT.FREE_SLOTS} · 완성 가로줄 ${done.length}줄 → 전체 점수 ×${GM.scoreMult(game)}</span></div>
+      <div class="bjump"><button class="tab${isDes ? ' on' : ''}" data-act="jump" data-arg="des">지정카드</button><button class="tab${!isDes && !isVault ? ' on' : ''}" data-act="jump" data-arg="free">일반카드</button><button class="tab${isVault ? ' on' : ''}" data-act="jump" data-arg="vault">팩보관함 ${vault.length}</button><button class="bclose" data-act="book" title="닫기">✕</button></div></div>
     <div class="book">
       <button class="turn" data-act="turn" data-arg="-1" ${bookPage === 0 ? 'disabled' : ''}>◀</button>
-      <div class="pagewrap"><div class="page ${isDes ? 'des' : 'freep'} ${bookTurn}" id="page"><div class="ptitle">${title}</div>${body}</div></div>
+      <div class="pagewrap"><div class="page ${isDes ? 'des' : isVault ? 'vaultp' : 'freep'} ${bookTurn}" id="page"><div class="ptitle">${title}</div>${body}</div></div>
       <button class="turn" data-act="turn" data-arg="1" ${bookPage === total - 1 ? 'disabled' : ''}>▶</button>
     </div>
-    <div class="tabs">${tabs}${btn('임시칸 → 지정칸 자동 정리', 'arrange')}</div>
-    ${renderSelected()}`;
+    <div class="tabs"><span class="muted">${title} · 페이지 ${bookPage + 1}/${total}</span>${btn('임시칸 → 지정칸 자동 정리', 'arrange')}</div>
+    ${renderSelected()}</div></div>`;
 }
 function renderSelected() {
   if (!selUid) return '<p class="muted">도감의 카드를 누르면 지정칸 넣기·판매 등을 할 수 있습니다.</p>';
@@ -375,19 +430,15 @@ function renderGame() {
       ${btn('새 게임', 'new', undefined, false, 'big primary')} ${btn('기록 보기', 'go', 'records')} ${btn('메뉴', 'go', 'menu')}</div>${renderLog()}</div>`;
   }
   let main = '';
-  // 미개봉 팩
-  const counts = {};
-  game.unopened.forEach(p => { const k = DT.PACKS[p.k].name + (p.single ? ' 낱개' : ''); counts[k] = (counts[k] || 0) + 1; });
   if (tour) {
     main += `<div class="contest"><h2>🏆 ${c.week}주차 카드 언팩 대회</h2>
       <p>대회팩 ${c.packs}개를 열어 <b>정산 합계(× 전체 점수 배율)</b>가 <b>${c.target}점</b> 이상이면 통과, 못 미치면 탈락(게임 오버). 통과 상금 ${won(Math.round(c.target * DT.TOURNEY.prize))}. 오늘은 할당량이 없고 팩을 팔지 않습니다.</p>
       <div class="meter"><div style="width:${Math.min(100, c.score / c.target * 100)}%"></div><span>${c.score} / ${c.target}점 · ${c.opened}/${c.packs}팩</span></div></div>`;
   }
-  main += `<h2>${bazaar ? '🎪 바자회 — 오늘 마감 후' : '📭 미개봉 팩'} <small>한 번에 1팩씩 · 개봉 중에는 상점 이용 불가</small></h2><div class="box big-cta">
-    ${game.unopened.length ? Object.entries(counts).map(([k, n]) => `${k} ×${n}`).join(', ') + ' ' + btn('팩 열기 →', 'open', 0, false, 'big primary') : '<span class="muted">열 팩이 없습니다.</span>'}</div>`;
+  if (bazaar) main += `<h2>🎪 바자회 <small>오늘 마감 후 · 업그레이드는 오른쪽 배너</small></h2>`;
+  main += renderUnopened();
   if (bazaar) main += renderBazaarCorner(m);
   else if (!tour) main += renderPacks(m);
-  main += renderBook();
   main += `<div class="box" style="margin-top:10px"><b>현재 효과</b>: ${effectsText(m)}</div>`;
   // 하루 마무리
   if (bazaar) {
@@ -405,7 +456,8 @@ function renderGame() {
       <br><br>${btn(`할당량 ${won(q)} 지불하고 마감 →`, 'pay', undefined, false, 'big')}</div>`;
   }
   main += renderLog();
-  return html + `<div class="layout">${renderLeft()}<main>${main}</main>${renderRight()}</div>`;
+  const fab = `<button class="binder-fab" data-act="book">📖 도감<small>지정 ${Object.keys(game.binder.des).length}/${DT.DESIGNATED.length} · 임시 ${DT.FREE_SLOTS - GM.freeRoom(game)}/${DT.FREE_SLOTS} · 팩 ${(game.vault || []).length} · ×${GM.scoreMult(game)}</small></button>`;
+  return html + `<div class="layout">${renderLeft()}<main>${main}</main>${renderRight()}</div>${fab}${bookOpen ? renderBook() : ''}`;
 }
 function renderLog() {
   return `<h2>기록</h2><div class="log">${game.log.map(esc).join('<br>')}</div>`;
@@ -419,7 +471,8 @@ function render() {
   else if (screen === 'album') app.innerHTML = renderAlbum();
   else if (screen === 'unlocks') app.innerHTML = renderUnlocks();
   else app.innerHTML = renderMenu();
-  if (screen === 'game' && game && !game.over) mountBookCards();
+  if (screen === 'game' && game && !game.over && bookOpen) mountBookCards();
+  document.body.style.overflow = bookOpen && screen === 'game' ? 'hidden' : $('#opening').hidden ? '' : 'hidden';
   bookTurn = '';
   window.scrollTo(0, y);
 }
@@ -433,8 +486,22 @@ const actions = {
     game = saved; msg = game.day + '일차 이어하기'; screen = 'game'; selUid = null;
     if (game.opening) { msg += ' — 개봉 중이던 팩을 다시 엽니다'; setTimeout(showOpening, 0); }
   },
-  go(arg) { screen = arg; if (arg !== 'game') msg = ''; window.scrollTo(0, 0); },
-  buyPack(arg) { const [k, kind] = arg.split(':'); say(GM.buyPack(game, meta, k, kind)); },
+  go(arg) { screen = arg; bookOpen = false; if (arg !== 'game') msg = ''; window.scrollTo(0, 0); },
+  // 팩을 사면 바로 개봉 (묶음이면 첫 팩부터, 나머지는 [다음 팩 열기]로 이어짐)
+  buyPack(arg) {
+    const [k, kind] = arg.split(':');
+    const r = GM.buyPack(game, meta, k, kind);
+    say(r);
+    if (r.ok) actions.open(game.unopened.length - (kind === 'bundle' && !DT.PACKS[k].theme && !DT.PACKS[k].bazaar ? 5 : 1));
+  },
+  book() { bookOpen = !bookOpen; if (!bookOpen) selUid = null; },
+  openVault(i) {
+    const r = GM.openVault(game, meta, +i);
+    if (!r.ok) { say(r); return; }
+    bookOpen = false; selUid = null; msg = '';
+    setTimeout(showOpening, 0);
+  },
+  jump(where) { const np = where === 'des' ? 0 : where === 'vault' ? VAULT_PAGE : DES_PAGES; bookTurn = np > bookPage ? 'in-next' : np < bookPage ? 'in-prev' : ''; bookPage = np; },
   buyItem(i) { say(GM.buyItem(game, meta, +i)); },
   buyUpgrade(i) { say(GM.buyUpgrade(game, meta, +i)); },
   useItem(i) { say(GM.useItem(game, +i)); },
@@ -470,6 +537,7 @@ const actions = {
 };
 
 $('#app').addEventListener('click', e => {
+  if (e.target.classList.contains('bmodal')) { bookOpen = false; selUid = null; render(); return; }
   const zoom = e.target.closest('.bslot .zoom');
   if (zoom) { e.stopPropagation(); actions.inspect(zoom.closest('.bslot').dataset.uid); return; }
   const slotEl = e.target.closest('.bslot.has');
@@ -481,6 +549,10 @@ $('#app').addEventListener('click', e => {
   fn(b.dataset.arg);
   persist();
   render();
+});
+
+addEventListener('keydown', e => {
+  if (e.key === 'Escape' && bookOpen && !$('#modal').classList.contains('open')) { bookOpen = false; selUid = null; render(); }
 });
 
 render();

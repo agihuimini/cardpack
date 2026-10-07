@@ -125,6 +125,7 @@
   const DESIGNATED = ROWS.flatMap(r => r.ids);   // 지정카드 번호 순서 (No.001 ~ No.048)
   const FREE_SLOTS = 32;                          // 일반카드(임시) 칸
   const FREE_PER_PAGE = 8;
+  const VAULT_MAX = 12;                           // 도감 팩보관함: 뜯지 않은 팩을 통째로 보관
 
   // 효과(mod) 키
   //  hi: 골드 이상 확률 +%   tagHi:{분류} 그 분류 카드 골드 이상 확률 +%   single: 낱개 보너스 +
@@ -184,7 +185,7 @@
   const D = {
     C, PACK_SIZE, START_MONEY, MAX_PACKS, SHOWCASE_BASE, SHOWCASE_MAX, BAG_MAX, SINGLE_BONUS, ROW_MULT, EVENT_CHANCE, INTEREST_CAP,
     QUOTA_CAP_DISCOUNT, WEEK, BAZAAR_DAYS, TOURNEY_DAY, dayOfWeek, weekOf, quota, TOURNEY, GRADE_P, FINISH_P, BAZAAR_PREMIUM,
-    NORMAL, SPECIALS, EVENTS, DEFS, TAGS, GOLD_UP, PACKS, THEME_PACKS, ROWS, ROWS_PER_PAGE, DESIGNATED, FREE_SLOTS, FREE_PER_PAGE,
+    NORMAL, SPECIALS, EVENTS, DEFS, TAGS, GOLD_UP, PACKS, THEME_PACKS, ROWS, ROWS_PER_PAGE, DESIGNATED, FREE_SLOTS, FREE_PER_PAGE, VAULT_MAX,
     ITEMS, UPGRADES, LUCK_MAX, LUCK_STEP, luckPrice, UNLOCKS, NPC_NAMES, NPC_TYPES,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = D;

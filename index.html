@@ -19,7 +19,7 @@ button:disabled{opacity:.4;cursor:default}
 a{color:#8fb0ff}
 
 /* ---------- 메인 화면 ---------- */
-#app{max-width:1560px;margin:0 auto;padding:0 16px 48px}
+#app{max-width:1560px;margin:0 auto;padding:0 16px 110px}
 .narrow{max-width:1000px;margin:0 auto}
 h1{font-size:22px;margin:18px 0 10px}
 h2{font-size:15px;margin:22px 0 8px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
@@ -45,7 +45,7 @@ th{color:var(--muted);font-weight:500}
 .layout main{min-width:0}
 .banner{position:sticky;top:64px;max-height:calc(100vh - 76px);overflow-y:auto;margin-top:14px;padding:0 10px 12px;border-radius:12px;
   background:linear-gradient(180deg,#232838,#1b1f2a);border:1px solid #343a4c;box-shadow:0 8px 24px rgba(0,0,0,.35)}
-.banner.left{border-top:4px solid #3fb8a9}.banner.right{border-top:4px solid #c792ff}
+.banner.left{border-top:4px solid #3fb8a9;max-height:calc(100vh - 160px)}.banner.right{border-top:4px solid #c792ff}
 .ribbon{margin:0 -10px 8px;padding:9px 12px;font-weight:800;letter-spacing:.02em;background:rgba(255,255,255,.04);border-bottom:1px solid #343a4c}
 .ribbon.sub{margin-top:12px;font-size:13px;font-weight:700}
 .banner p{margin:4px 0 8px}
@@ -57,7 +57,7 @@ th{color:var(--muted);font-weight:500}
 @media (max-width:1100px){
   .layout{grid-template-columns:1fr 1fr}
   .layout main{grid-column:1 / -1;order:-1}
-  .banner{position:static;max-height:none}
+  .banner,.banner.left{position:static;max-height:none}
 }
 @media (max-width:640px){ .layout{grid-template-columns:1fr} }
 
@@ -87,6 +87,81 @@ th{color:var(--muted);font-weight:500}
 .g-epic{--g:linear-gradient(115deg,#4c1d95,#c77dff,#7b2ff7)}.g-legend{--g:linear-gradient(115deg,#7f1d1d,#ff4d4d,#dc2626)}
 .g-event{--g:linear-gradient(115deg,#ffd76a,#ff7773,#d875ff,#83fff7)}
 .mini.f-black .in{background:#0c0c0e;color:#f2f2f2}
+
+
+/* ---------- 카드팩 이미지 ---------- */
+.shelf{display:flex;flex-wrap:wrap;gap:14px 12px;padding:14px 12px 10px;border-radius:12px;
+  background:linear-gradient(180deg,#1f2330,#191c26);border:1px solid var(--line);box-shadow:inset 0 -10px 0 #262b38,inset 0 -12px 0 #11131a}
+.shelf.special{background:linear-gradient(180deg,#261f33,#1b1724)}
+.pkbtn{all:unset;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;width:104px}
+.pkbtn:focus-visible .pk{outline:3px solid var(--accent);outline-offset:3px}
+.pkbtn:disabled{cursor:default}
+.pkbtn:disabled .pk{filter:grayscale(.85) brightness(.55)}
+.pkbtn:disabled .pk-price{opacity:.5}
+.pk{position:relative;width:96px;height:136px;border-radius:6px;transition:transform .18s,box-shadow .18s;
+  background:var(--pkbg,linear-gradient(160deg,#3a4cff,#9b3dff 55%,#ff4fa3));box-shadow:0 8px 18px rgba(0,0,0,.45);color:#fff;overflow:visible}
+.pkbtn:not(:disabled):hover .pk{transform:translateY(-6px) rotate(-1.5deg);box-shadow:0 14px 26px rgba(0,0,0,.55),0 0 0 2px rgba(255,255,255,.18)}
+.pk::after{content:"";position:absolute;inset:0;border-radius:6px;pointer-events:none;
+  background:linear-gradient(115deg,rgba(255,255,255,0) 30%,rgba(255,255,255,.28) 45%,rgba(255,255,255,0) 60%)}
+.pk-top{position:absolute;left:0;right:0;top:0;height:18px;border-radius:6px 6px 0 0;background:inherit;filter:brightness(1.15);
+  clip-path:polygon(0 0,100% 0,100% 70%,95% 100%,90% 70%,85% 100%,80% 70%,75% 100%,70% 70%,65% 100%,60% 70%,55% 100%,50% 70%,45% 100%,40% 70%,35% 100%,30% 70%,25% 100%,20% 70%,15% 100%,10% 70%,5% 100%,0 70%)}
+.pk-body{position:absolute;inset:22px 6px 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:4px}
+.pk-logo{font-size:9px;font-weight:800;letter-spacing:.14em;opacity:.85}
+.pk-body b{font-size:12.5px;line-height:1.2;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+.pk-body small{font-size:9.5px;line-height:1.25;opacity:.85}
+.pk-x{position:absolute;right:-6px;top:-8px;padding:1px 6px;border-radius:9px;background:#ff4fa3;font-size:11px;font-weight:800;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.pk-badge{position:absolute;left:50%;bottom:-8px;translate:-50% 0;white-space:nowrap;padding:0 6px;border-radius:8px;background:#14161c;border:1px solid #3a3f50;font-size:10px;color:#cfd3df}
+.pk.bundle{box-shadow:6px -6px 0 -1px rgba(255,255,255,.08),6px -6px 0 0 #2a2f3d,12px -12px 0 -1px rgba(255,255,255,.06),12px -12px 0 0 #232836,0 8px 18px rgba(0,0,0,.45)}
+.pk-price{font-weight:800;font-size:13px;color:#ffe9a8;font-variant-numeric:tabular-nums}
+.pk-basic{--pkbg:linear-gradient(160deg,#3a4cff,#9b3dff 55%,#ff4fa3)}
+.pk-advanced{--pkbg:linear-gradient(160deg,#0f9b8e,#2c7be5 60%,#6f42c1)}
+.pk-premium{--pkbg:linear-gradient(160deg,#b8860b,#ff9f1c 50%,#d7263d)}
+.pk-series1{--pkbg:linear-gradient(160deg,#e85d75,#f9a03f 50%,#3fa34d)}
+.pk-series2{--pkbg:linear-gradient(160deg,#00a6a6,#5e60ce 55%,#c77dff)}
+.pk-gradeC{--pkbg:linear-gradient(135deg,#6e421c,#d39558 50%,#7a4a20)}
+.pk-gradeB{--pkbg:linear-gradient(135deg,#6b7280,#e5e7eb 50%,#7d838c);color:#1f2329}
+.pk-gradeA{--pkbg:linear-gradient(135deg,#9c6d08,#fff0a8 50%,#b8860b);color:#3a2a00}
+.pk-tag{--pkbg:linear-gradient(160deg,hsl(var(--hue),70%,45%),hsl(calc(var(--hue) + 40),75%,35%))}
+.pk-contest{--pkbg:linear-gradient(160deg,#4a3500,#d4a72c 45%,#fff0a8 55%,#8a6a10)}
+.pk-special,.pk-special2{--pkbg:linear-gradient(160deg,#5b1a5e,#c2185b 55%,#ff8a00)}
+.pk-gradeB .pk-body b,.pk-gradeA .pk-body b{text-shadow:none}
+
+/* 개봉 화면의 팩도 산 팩 종류의 색으로 */
+#pack[class*="pk-"] .body,#pack[class*="pk-"] .top{background:var(--pkbg)}
+#pack.pk-gradeB .body,#pack.pk-gradeA .body{color:#2a2410}
+
+
+/* 개봉 화면 왼쪽 아래: 남은 팩 */
+#remainPacks{position:absolute;left:12px;bottom:10px;z-index:6;pointer-events:none}
+#remainPacks .rp-label{font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700}
+#remainPacks .rp-row{display:flex;gap:4px;align-items:flex-end}
+.pk.mini{width:30px;height:42px;border-radius:3px;box-shadow:0 3px 8px rgba(0,0,0,.45)}
+.pk.mini .pk-top{height:7px;border-radius:3px 3px 0 0}
+.pk.mini.ghost{width:56px;height:78px;background:none;border:2px dashed #565d73;box-shadow:none;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10px;color:#7b8297;line-height:1.3}
+.pk.mini.ghost::after{display:none}
+.rp-more{font-size:11px;color:var(--muted);margin-left:2px}
+/* 도감 팩보관함 */
+.page.vaultp{background:radial-gradient(120% 90% at 30% 0%,#3a3046,#2a2335 60%,#211b2b)}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:14px 10px;justify-items:center}
+.vslot{width:96px;height:136px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#6b6380;
+  background:linear-gradient(180deg,#1d1826,#231d2e);box-shadow:inset 0 4px 10px rgba(0,0,0,.7),inset 0 -1px 0 rgba(255,255,255,.06)}
+
+/* ---------- 도감 버튼(왼쪽 아래) + 떠서 열리는 도감 ---------- */
+.binder-fab{position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:15;display:flex;flex-direction:column;align-items:flex-start;gap:2px;
+  padding:10px 16px;border-radius:14px;font-weight:800;font-size:15px;background:linear-gradient(160deg,#2a3150,#1d2235);border:1px solid #4a5478;box-shadow:0 10px 26px rgba(0,0,0,.5)}
+.binder-fab small{font-weight:500;font-size:11px;color:var(--muted)}
+.binder-fab:hover{border-color:var(--accent)}
+.bmodal{position:fixed;inset:0;z-index:25;background:rgba(8,10,16,.66);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
+  display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:calc(20px + env(safe-area-inset-top,0px)) 16px 24px;animation:bmIn .22s ease-out}
+@keyframes bmIn{from{opacity:0}to{opacity:1}}
+.bpanel{width:min(900px,100%);background:var(--panel);border:1px solid #3a4058;border-radius:16px;padding:12px 14px 14px;box-shadow:0 24px 60px rgba(0,0,0,.6);animation:bpUp .25s cubic-bezier(.2,.8,.2,1)}
+@keyframes bpUp{from{transform:translateY(30px) scale(.98)}to{transform:none}}
+.bhead{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.bhead b{font-size:16px}
+.bjump{display:flex;gap:4px;align-items:center;margin-left:auto}
+.bjump .tab{padding:5px 10px;font-size:13px}
+.bjump .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.bclose{margin-left:6px;width:34px;height:34px;padding:0;font-size:16px}
 
 /* ---------- 도감: 스위치 칩 케이스처럼 오목한 칸에 카드가 끼워진 책 ---------- */
 .book{display:flex;align-items:center;gap:10px;perspective:1800px}
@@ -118,7 +193,7 @@ th{color:var(--muted);font-weight:500}
 .bcard .card{cursor:pointer}
 .bcard .card:hover{transform:translateY(-3px)}
 .bcard .zoom{font-size:.8em}
-.tabs{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 0 52px;align-items:center}
+.tabs{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 0 52px;align-items:center;justify-content:space-between;margin-right:52px}
 .tabs .tab{padding:3px 8px;font-size:12px}
 .tabs .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .selbar{border-color:var(--accent)}
@@ -128,7 +203,7 @@ th{color:var(--muted);font-weight:500}
   .rlabel{width:auto}
   .bcells,.bcells.free{gap:6px}
   .bslot{--cw:64px;--ch:90px}
-  .tabs{margin-left:0}
+  .tabs{margin:8px 0 0}
 }
 
 /* 카드 앨범 (메타) */
@@ -140,7 +215,8 @@ th{color:var(--muted);font-weight:500}
 .over{border:2px solid var(--bad);background:#2a1618;border-radius:8px;padding:14px;margin:12px 0}
 
 /* ---------- 개봉 화면 (demo/unpack.html과 같은 엔진·스타일) ---------- */
-#opening{position:fixed;inset:0;z-index:30;background:var(--bg);display:flex;flex-direction:column}
+/* 상점 화면을 배경에 흐리게 남긴 채 그 위에서 개봉 */
+#opening{position:fixed;inset:0;z-index:30;background:rgba(12,14,20,.62);-webkit-backdrop-filter:blur(6px) saturate(.8);backdrop-filter:blur(6px) saturate(.8);display:flex;flex-direction:column}
 #opening[hidden]{display:none!important}
 #opening header{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:8px 16px;padding-top:calc(8px + env(safe-area-inset-top,0px));border-bottom:1px solid var(--line);background:var(--panel);font-size:13px}
 #opening header h1{font-size:15px;margin:0}
@@ -159,6 +235,7 @@ th{color:var(--muted);font-weight:500}
   <header><h1 id="oTitle">개봉</h1><div class="sp" id="oStat"></div></header>
   <div id="stage">
     <div id="settleList"></div>
+    <div id="remainPacks"></div>
     <div id="table"></div>
   </div>
   <footer id="bar"></footer>

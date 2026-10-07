@@ -152,7 +152,7 @@
     const state = {
       v: 3, day: 1, phase: 'day', money: D.START_MONEY, peak: D.START_MONEY,
       binder: { des: {}, free: Array(D.FREE_SLOTS).fill(null) },
-      bag: [], showcase: [], shelves: 0, ups: {}, luck: {}, effects: [],
+      bag: [], showcase: [], shelves: 0, ups: {}, luck: {}, effects: [], vault: [],
       unopened: [], opening: null, packsBought: 0, shop: null, contest: null, over: false, survived: 0, eventsSeen: [], nextUid: 1, log: [],
       stats: { packs: 0, cards: 0, earned: 0, best: null },
     };
@@ -398,10 +398,28 @@
     const cards = rollPack(state, pk.k, pk.single, m);
     state.effects = state.effects.filter(e => !('packs' in e) || --e.packs > 0);
     state.opening = { k: pk.k, single: pk.single, cards };
-    cards.forEach(s => markSeen(meta, s.d));
-    state.stats.packs++;
-    state.stats.cards += cards.length;
     return { ok: true, cards };
+  }
+  // 개봉할 차례의 팩을 뜯지 않고 도감 팩보관함에 통째로 보관 (안의 카드는 이미 정해진 그대로)
+  function keepSealed(state) {
+    const op = state.opening;
+    if (!op) return { ok: false };
+    if (op.k === 'contest') return { ok: false, msg: '대회팩은 보관할 수 없습니다.' };
+    state.vault = state.vault || [];
+    if (state.vault.length >= D.VAULT_MAX) return { ok: false, msg: '팩보관함이 가득 찼습니다 (' + D.VAULT_MAX + '칸).' };
+    state.vault.push({ k: op.k, single: op.single, cards: op.cards, day: state.day });
+    state.opening = null;
+    log(state, PACKS[op.k].name + ' 팩째로 보관');
+    return { ok: true, msg: PACKS[op.k].name + '을(를) 뜯지 않고 도감 팩보관함에 보관했습니다' };
+  }
+  function openVault(state, meta, idx) {
+    if (state.over) return { ok: false };
+    if (state.opening) return { ok: false, msg: '이미 개봉 중인 팩이 있습니다.' };
+    const v = (state.vault || [])[idx];
+    if (!v) return { ok: false };
+    state.vault.splice(idx, 1);
+    state.opening = { k: v.k, single: v.single, cards: v.cards };
+    return { ok: true, cards: v.cards };
   }
   // 정산 후 판매: kept = 판매에서 제외할 카드 인덱스 → 도감 일반카드(임시) 칸으로
   function finishOpening(state, meta, kept = []) {
@@ -409,6 +427,9 @@
     if (!op) return { ok: false };
     if (kept.length > freeRoom(state)) return { ok: false, msg: '도감 일반카드 칸이 부족합니다.' };
     const m = mods(state);
+    op.cards.forEach(s => markSeen(meta, s.d));
+    state.stats.packs++;
+    state.stats.cards += op.cards.length;
     let sum = 0;
     const packScore = r2(op.cards.reduce((s, c) => s + c.p, 0) * scoreMult(state));
     op.cards.forEach((s, i) => {
@@ -572,7 +593,7 @@
     D, newMeta, refreshMeta, markSeen, newGame, startDay, mods, dow, isTourney, isBazaar, bazaarAfterToday, maxPacks, quotaToday,
     showcaseSlots, saleMult, saleValue, scoreMult, completedRows, hydrate, inspectable, cardLabel, isEvent, allBinder, findCard, freeRoom,
     placeDesignated, unplace, autoArrange, packPrice, availablePacks, buyPack, buyItem, upgradePrice, buyUpgrade, useItem, sellShowcase,
-    startOpening, finishOpening, sellCard, binderValue, buySingle, npcAction, collectorPrice, pay, leaveBazaar, finishContest,
+    startOpening, keepSealed, openVault, finishOpening, sellCard, binderValue, buySingle, npcAction, collectorPrice, pay, leaveBazaar, finishContest,
     totalAssets, gameOver, rollPack, r2,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = G;
