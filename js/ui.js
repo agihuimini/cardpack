@@ -186,20 +186,40 @@ const nextBazaarText = g => {
 function renderMenu() {
   const saved = SV.loadGame();
   const best = meta.records[0];
-  return `<div class="narrow"><h1>CARDPACK <span class="muted">목업 v0.3</span></h1>
-    <div class="box big-cta">
-      ${btn('새 게임', 'new', undefined, false, 'big primary')}
-      ${btn(saved ? `이어하기 (${saved.day}일차, ${won(saved.money)})` : '이어하기 (저장 없음)', 'continue', undefined, !saved, 'big')}
-      ${btn('기록', 'go', 'records')} ${btn('카드 앨범', 'go', 'album')} ${btn('해금', 'go', 'unlocks')}
-      <a href="demo/unpack.html">개봉 연출 데모 →</a>
-    </div>
-    <p class="muted">최고 기록: ${best ? best.days + '일 생존 (총자산 ' + won(best.assets) + ')' : '없음'} · 플레이 ${meta.games}판 · 대회 통과 ${meta.contests}회 · 앨범 수집률 ${Math.round(meta.albumRate * 100)}%</p>
+  const item = (label, act, arg, sub, disabled, cls) =>
+    `<button class="mitem${cls ? ' ' + cls : ''}" data-act="${act}"${arg !== undefined ? ` data-arg="${arg}"` : ''}${disabled ? ' disabled' : ''}><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</button>`;
+  return `<div class="title">
+    <div class="logo"><div class="pk pk-basic"><div class="pk-top"></div><div class="pk-body"><span class="pk-logo">CARDPACK</span></div></div>
+      <div><h1>CARDPACK</h1><p class="muted">랜덤 카드팩 개봉 로그라이크 · 목업 v0.3.1</p></div></div>
     ${msg ? `<div class="msg">${esc(msg)}</div>` : ''}
-    <h2>규칙 요약</h2>
-    <div class="box">매일 팩을 사서(하루 최대 ${DT.MAX_PACKS}팩) <b>한 팩(${DT.PACK_SIZE}장)씩</b> 개봉합니다. 모두 공개되면 카드 능력까지 반영해 가격이 확정되고,
+    <nav class="menu">
+      ${item('새로하기', 'new', undefined, '', false, 'primary')}
+      ${item('이어하기', 'continue', undefined, saved ? `${saved.day}일차 · ${won(saved.money)}` : '저장된 게임 없음', !saved)}
+      ${item('기록', 'go', 'records', best ? `최고 ${best.days}일 생존` : '')}
+      ${item('앨범', 'go', 'album', `수집률 ${Math.round(meta.albumRate * 100)}%`)}
+      ${item('해금', 'go', 'unlocks', `${meta.unlocks.length}/${DT.UNLOCKS.length}`)}
+      ${item('게임 방법', 'go', 'howto')}
+      ${item('제작자', 'go', 'credits')}
+    </nav>
+    <p class="muted foot">플레이 ${meta.games}판 · 대회 통과 ${meta.contests}회 · <a href="demo/unpack.html">개봉 연출 데모</a></p></div>`;
+}
+function renderHowto() {
+  return `<div class="narrow"><h1>게임 방법</h1>${btn('← 메뉴', 'go', 'menu')}
+    <div class="box" style="margin-top:10px;line-height:1.7">매일 팩을 사서(하루 최대 ${DT.MAX_PACKS}팩) <b>한 팩(${DT.PACK_SIZE}장)씩</b> 개봉합니다. 모두 공개되면 카드 능력까지 반영해 가격이 확정되고,
     일괄 판매하거나 원하는 카드를 판매에서 제외해 <b>도감</b>에 넣습니다. 하루 끝에 <b>할당량</b>을 못 내면 게임 오버.<br>
     <b>1주 = 7일</b>: 3·6일차는 마감 후 <b>바자회</b>(업그레이드는 바자회에서만), 7일차는 <b>카드 언팩 대회</b> — 대회팩 ${DT.TOURNEY.packs}개 점수 합계가 목표에 못 미치면 탈락.<br>
-    도감 지정카드 페이지에서 가로줄 4장을 채우면 줄마다 <b>전체 점수 ×${DT.ROW_MULT}</b>.</div></div>`;
+    도감 지정카드 페이지에서 가로줄 4장을 채우면 줄마다 <b>전체 점수 ×${DT.ROW_MULT}</b>. 팩은 뜯지 않고 <b>팩보관함</b>에 보관할 수도 있습니다.</div></div>`;
+}
+function renderCredits() {
+  return `<div class="narrow"><h1>제작자</h1>${btn('← 메뉴', 'go', 'menu')}
+    <div class="credits">
+      <dl><dt>기획</dt><dd>agihuimini</dd>
+      <dt>개발</dt><dd>Claude Code (Claude Opus 5.5)</dd>
+      <dt>참고작</dt><dd>Balatro · CloverPit · 헌터×헌터 G.I. 바인더</dd>
+      <dt>연출 레퍼런스</dt><dd>3D Card Animation (Framer) · Pokémon Cards CSS Holographic (simeydotme) · canigetyourholograph</dd>
+      <dt>버전</dt><dd>목업 v0.3.1 · <a href="https://github.com/agihuimini/cardpack" target="_blank" rel="noopener">GitHub</a></dd></dl>
+      <p class="muted">카드 그림은 이모지로 대신한 목업입니다.</p>
+    </div></div>`;
 }
 function renderRecords() {
   const rows = meta.records.map((r, i) => `<tr><td>${i + 1}</td><td>${r.days}일</td><td>${won(r.assets)}</td><td>${r.date}</td></tr>`).join('');
@@ -470,6 +490,8 @@ function render() {
   else if (screen === 'records') app.innerHTML = renderRecords();
   else if (screen === 'album') app.innerHTML = renderAlbum();
   else if (screen === 'unlocks') app.innerHTML = renderUnlocks();
+  else if (screen === 'howto') app.innerHTML = renderHowto();
+  else if (screen === 'credits') app.innerHTML = renderCredits();
   else app.innerHTML = renderMenu();
   if (screen === 'game' && game && !game.over && bookOpen) mountBookCards();
   document.body.style.overflow = bookOpen && screen === 'game' ? 'hidden' : $('#opening').hidden ? '' : 'hidden';
