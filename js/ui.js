@@ -11,7 +11,7 @@ let game = null;
 let meta = Object.assign(GM.newMeta(), SV.loadMeta() || {});
 GM.refreshMeta(meta);
 let screen = 'menu', msg = '', keptBefore = new Set(), showSettle = false;
-let bookPage = 0, bookTurn = '', selUid = null, bookOpen = false;
+let bookPage = 0, bookTurn = '', selUid = null, bookOpen = false, ksel = 0, settingsBack = 'menu';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const won = n => (Math.round(n * 10) / 10).toLocaleString('ko-KR') + '원';
@@ -41,11 +41,13 @@ function renderPack() {
   t.className = '';
   const op = game.opening;
   const look = packLook(op.k);
-  t.innerHTML = `<div id="pack" class="${look.cls}" style="--hue:${look.hue}"><div class="beam"></div><div class="top"></div><div class="rip"></div><span class="grip">✂ 드래그해서 찢기</span>
+  t.innerHTML = `<div id="pack" class="${look.cls}" style="--hue:${look.hue}"><div class="beam"></div><div class="top"></div><div class="rip"></div><span class="grip">✂ 오른쪽으로 끌어 찢기</span>
     <div class="body">CARDPACK<small>${DT.PACKS[op.k].name}${op.single ? ' 낱개' : ''} · ${op.cards.length}장</small></div></div>`;
   bindPackDrag($('#pack'));
   $('#settleList').innerHTML = '';
   keptBefore = new Set();
+  ksel = 0;
+  packInfo(false);
   state = 'pack'; renderBar();
   renderRemain();
 }
@@ -57,13 +59,36 @@ function renderRemain() {
     ? `<div class="rp-label">남은 팩 ${list.length}</div><div class="rp-row">${thumbs}${list.length > 10 ? `<span class="rp-more">+${list.length - 10}</span>` : ''}</div>`
     : `<div class="rp-label">남은 팩 0</div><div class="rp-row"><div class="pk mini ghost"><span>남은 팩<br>없음</span></div></div>`;
 }
+// 팩째로 보관 (W 키, [보관] 버튼, 팩을 왼쪽으로 끌기)
 function afterKeep() {
   const r = GM.keepSealed(game);
-  if (!r.ok) { $('#bar').insertAdjacentHTML('afterbegin', `<b style="color:var(--bad)">${esc(r.msg)}</b>`); return; }
+  if (!r.ok) { const p = $('#pack'); if (p) p.style.transform = ''; flashBar(r.msg); return; }
   persist();
   msg = r.msg;
-  if (game.unopened.length) { GM.startOpening(game, meta, 0); persist(); updateOpeningHeader(); renderPack(); }
+  if (game.unopened.length) { GM.startOpening(game, meta, 0); persist(); updateOpeningHeader(); renderPack(); flashBar('📦 ' + r.msg, true); }
   else closeOpening();
+}
+window.PACK_DRAG_LEFT = afterKeep;
+// 개봉 차례의 팩 바꾸기 (←/→)
+function cycle(dir) {
+  if (state !== 'pack' || !game.unopened.length) return;
+  GM.cyclePack(game, dir);
+  persist(); updateOpeningHeader(); renderPack();
+}
+// 팩 자세히 보기 (E)
+function packInfo(show) {
+  const el = $('#packInfo');
+  if (!show) { el.hidden = true; return; }
+  const op = game.opening, p = DT.PACKS[op.k];
+  const odds = GM.packOdds(game, op.k, op.single);
+  const fin = ['sparkle', 'fullholo', 'black'].filter(f => game.ups['fin_' + f]).map(f => F.find(x => x.id === f).name);
+  el.innerHTML = `<div class="pibox"><div class="pk ${packLook(op.k).cls}" style="--hue:${packLook(op.k).hue}"><div class="pk-top"></div><div class="pk-body"><span class="pk-logo">CARDPACK</span><b>${esc(p.name)}</b></div></div>
+    <div><h3>${esc(p.name)}${op.single ? ' (낱개)' : ''}</h3>
+    <p class="muted">${op.cards.length}장 · ${p.desc ? esc(p.desc) + ' · ' : ''}골드 이상 ×${p.boost}${op.single ? ' · 낱개 보너스 적용' : ''}${p.specials ? ' · 특수카드 ' + p.specials + '장' : ''}</p>
+    <table>${odds.map(o => `<tr><td>${o.name}</td><td>${o.pct < 0.1 ? o.pct.toFixed(3) : o.pct.toFixed(1)}%</td></tr>`).join('')}</table>
+    <p class="muted">마감: 기본${fin.length ? ' · ' + fin.join(' · ') : ' (반짝이 이상은 바자회 업그레이드로 해금)'}${game.ups.halo ? ' · 이벤트 카드 등장 가능' : ''}<br>안의 카드는 이미 정해져 있습니다. 분류 행운은 표에 포함되지 않습니다.</p>
+    <p class="muted">E / Esc 닫기</p></div></div>`;
+  el.hidden = false;
 }
 function updateOpeningHeader() {
   const m = GM.mods(game);
@@ -71,7 +96,7 @@ function updateOpeningHeader() {
   $('#oTitle').textContent = `${game.day}일차 · ${game.opening ? DT.PACKS[game.opening.k].name + ' 개봉' : '정산 완료'}`;
   $('#oStat').innerHTML = `<span>소지금 <b>${won(game.money)}</b></span>` +
     (c ? `<span>대회 <b>${c.score}</b>/${c.target}점</span>` : GM.isBazaar(game) ? '<span>🎪 바자회 시세</span>' : `<span>할당량 <b>${won(GM.quotaToday(game, m))}</b></span>`) +
-    `<span>도감 임시칸 <b>${GM.freeRoom(game)}</b>칸 남음</span><span>미개봉 <b>${game.unopened.length}</b></span>`;
+    `<span>도감 일반카드란 <b>${GM.freeRoom(game)}</b>칸 남음</span><span>팩보관함 <b>${(game.vault || []).length}</b>/${DT.VAULT_MAX}</span>`;
 }
 function showOpening() {
   $('#opening').hidden = false;
@@ -82,63 +107,125 @@ function showOpening() {
 }
 function closeOpening() {
   $('#opening').hidden = true;
+  packInfo(false);
   document.body.style.overflow = '';
   state = 'idle';
   render();
 }
-function keptIdx() { return slots.map((s, i) => s.classList.contains('kept') ? i : -1).filter(i => i >= 0); }
+function flashBar(text, good) {
+  const b = $('#bar');
+  b.querySelectorAll('.barmsg').forEach(e => e.remove());
+  b.insertAdjacentHTML('afterbegin', `<b class="barmsg" style="color:${good ? 'var(--good)' : 'var(--bad)'}">${esc(text)}</b>`);
+}
+const doneArr = () => (game.opening && game.opening.done) || [];
+const liveIdx = () => cards.map((c, i) => i).filter(i => !doneArr()[i]);
+function keptIdx() { return slots.map((s, i) => s.classList.contains('kept') && !doneArr()[i] ? i : -1).filter(i => i >= 0); }
+// 키보드 선택 표시
+function markSel() {
+  slots.forEach((s, i) => s.classList.toggle('ksel', (state === 'settle' || state === 'reveal') && i === ksel));
+}
 
 function renderBar() {
   const b = $('#bar');
-  const n = cards.length;
   if (state === 'pack') {
     const canKeep = game.opening && game.opening.k !== 'contest';
-    b.innerHTML = `<span class="hint">팩을 클릭하거나, 잡고 옆으로 드래그해서 찢으세요 · 덜 찢고 놓으면 다시 봉인 · 빠르게 잡아떼면 확!</span>
-      ${canKeep ? `<button id="keepSealed" ${(game.vault || []).length >= DT.VAULT_MAX ? 'disabled' : ''}>📦 뜯지 않고 팩째로 보관 (팩보관함 ${(game.vault || []).length}/${DT.VAULT_MAX})</button>` : ''}`;
+    const v = (game.vault || []).length;
+    b.innerHTML = `<span class="hint">클릭 또는 → 끌기 = 찢기${canKeep ? ' · ← 끌기 = 팩보관함' : ''} · <kbd>Q</kbd> 개봉${canKeep ? ' <kbd>W</kbd> 보관' : ''} <kbd>E</kbd> 자세히${game.unopened.length ? ' <kbd>←</kbd><kbd>→</kbd> 팩 선택' : ''}</span>
+      ${game.unopened.length ? '<button id="prevPack">◀ 이전 팩</button><button id="nextSel">다음 팩 ▶</button>' : ''}
+      <button id="pkInfo">자세히 (E)</button>
+      ${canKeep ? `<button id="keepSealed" ${v >= DT.VAULT_MAX ? 'disabled' : ''}>📦 팩째로 보관 (W · ${v}/${DT.VAULT_MAX})</button>` : ''}`;
     if (canKeep) $('#keepSealed').onclick = afterKeep;
+    $('#pkInfo').onclick = () => packInfo($('#packInfo').hidden);
+    if (game.unopened.length) { $('#prevPack').onclick = () => cycle(-1); $('#nextSel').onclick = () => cycle(1); }
   }
   else if (state === 'tearing') b.innerHTML = `<span class="hint">… (클릭하면 스킵)</span>`;
   else if (state === 'settling') b.innerHTML = `<span class="hint">…</span>`;
   else if (state === 'reveal') {
-    b.innerHTML = `<button class="primary" id="all" ${busy ? 'disabled' : ''}>모두 뒤집기</button>
-      <span class="hint">${busy ? '연출 중 · 카드를 클릭하면 스킵' : '카드를 클릭하면 한 장씩 뒤집힘 · 뒤집힌 카드 클릭/🔍 = 자세히 보기'}</span>`;
+    b.innerHTML = `<button class="primary" id="all" ${busy ? 'disabled' : ''}>모두 뒤집기 (Space)</button>
+      <span class="hint">${busy ? '연출 중 · 카드를 클릭하면 스킵' : '카드 클릭 = 한 장씩 뒤집기 · <kbd>←</kbd><kbd>→</kbd> 선택 <kbd>Enter</kbd> 뒤집기 · 뒤집힌 카드 클릭/🔍 = 자세히'}</span>`;
     if (!busy) $('#all').onclick = flipAll;
+    markSel();
   } else if (state === 'settle') {
-    // 도감 임시칸이 가득 차면 판매 제외 불가: 방금 켠 표시는 되돌린다
+    const live = liveIdx();
+    if (!live.includes(ksel)) ksel = live[0] ?? 0;
+    // 도감 일반카드란이 가득 차면 판매 제외 불가: 방금 켠 표시는 되돌린다
     const room = GM.freeRoom(game);
     let warn = '';
     let kept = keptIdx();
     if (kept.length > room) {
       kept.filter(i => !keptBefore.has(i)).forEach(i => slots[i].classList.remove('kept'));
       kept = keptIdx();
-      warn = ` <b style="color:var(--bad)">도감 일반카드 칸이 부족해 더 제외할 수 없습니다 (${room}칸 남음)</b>`;
+      warn = ` <b style="color:var(--bad)">도감 일반카드란이 부족해 더 제외할 수 없습니다 (${room}칸 남음)</b>`;
     }
     keptBefore = new Set(kept);
     const m = GM.mods(game);
     const val = i => cards[i].price * GM.saleMult(game, cards[i].r.id, m);
-    const all = cards.reduce((s, c, i) => s + val(i), 0);
-    const part = cards.reduce((s, c, i) => s + (kept.includes(i) ? 0 : val(i)), 0);
+    const all = live.reduce((s, i) => s + val(i), 0);
+    const part = live.reduce((s, i) => s + (kept.includes(i) ? 0 : val(i)), 0);
     const multNote = GM.saleMult(game, 'common', m) !== 1 || GM.isBazaar(game) ? ' (판매 배율 적용)' : '';
     const contest = game.opening && game.opening.k === 'contest' ? ` · 대회 점수 +${GM.r2(cards.reduce((s, c) => s + c.price, 0) * GM.scoreMult(game))}` : '';
-    b.innerHTML = `<span class="hint">가격 확정${contest} · 카드를 클릭하면 판매 제외(→ 도감)${multNote}${warn}</span>
+    b.innerHTML = `<span class="hint">가격 확정${contest}${multNote} · 카드를 끌어서 ← 위 지정카드란 / ← 아래 일반카드란 / → 판매 · <kbd>←↑↓→</kbd> 선택 <kbd>Q</kbd> 지정 <kbd>W</kbd> 일반 <kbd>E</kbd> 상세 <kbd>R</kbd> 판매${warn}</span>
       <button id="showList">${showSettle ? '정산 내역 닫기' : '정산 내역'}</button>
-      <button id="sellAll">일괄 판매 (${n}장 · ${won(all)})</button>
-      <button class="primary" id="sellPart" ${kept.length ? '' : 'disabled'}>선택 제외 후 판매 (${n - kept.length}장 · ${won(part)}, ${kept.length}장 도감)</button>`;
+      <button id="sellAll">일괄 판매 (${live.length}장 · ${won(all)}) Space</button>
+      <button class="primary" id="sellPart" ${kept.length ? '' : 'disabled'}>선택 제외 후 판매 (${live.length - kept.length}장 · ${won(part)}, ${kept.length}장 도감)</button>`;
     $('#sellAll').onclick = () => sell(true);
     $('#sellPart').onclick = () => sell(false);
     $('#showList').onclick = () => { showSettle = !showSettle; renderBar(); };
     renderSettleList(kept);
+    markSel();
   }
 }
 function renderSettleList(kept) {
   if (!showSettle) { $('#settleList').innerHTML = ''; return; }
+  const dn = doneArr(), label = { des: '지정카드란', free: '일반카드란', sell: '판매함' };
   $('#settleList').innerHTML = '<b>정산 내역</b><br>' + cards.map((c, i) =>
-    `${i + 1}. ${c.def.art} ${esc(c.def.name)}${c.r.mark ? ' ' + c.r.mark : ''} <b>${won(c.price)}</b>${c.notes.length ? ' <span style="opacity:.75">(' + esc(c.notes.join(', ')) + ')</span>' : ''}${kept.includes(i) ? ' <span style="color:#2bb673">도감</span>' : ''}`).join('<br>');
+    `${i + 1}. ${c.def.art} ${esc(c.def.name)}${c.r.mark ? ' ' + c.r.mark : ''} <b>${won(c.price)}</b>${c.notes.length ? ' <span style="opacity:.75">(' + esc(c.notes.join(', ')) + ')</span>' : ''}${dn[i] ? ` <span style="color:#8fb0ff">${label[dn[i]]}</span>` : kept.includes(i) ? ' <span style="color:#2bb673">도감</span>' : ''}`).join('<br>');
 }
-function sell(all) {
+// 판매 전 확인 (설정에서 끌 수 있음)
+function confirmSell(text) {
+  if (!meta.settings || meta.settings.confirmSell === false) return Promise.resolve(true);
+  return new Promise(res => {
+    const box = $('#confirm');
+    $('#cMsg').textContent = text;
+    box.hidden = false;
+    const done = v => { box.hidden = true; $('#cOk').onclick = $('#cNo').onclick = null; confirmResolve = null; res(v); };
+    confirmResolve = done;
+    $('#cOk').onclick = () => done(true);
+    $('#cNo').onclick = () => done(false);
+    $('#cOk').focus();
+  });
+}
+let confirmResolve = null;
+async function sell(all) {
   const kept = all ? [] : keptIdx();
+  const live = liveIdx();
+  const m = GM.mods(game);
+  const total = live.filter(i => !kept.includes(i)).reduce((s, i) => s + cards[i].price * GM.saleMult(game, cards[i].r.id, m), 0);
+  if (!(await confirmSell(`${live.length - kept.length}장을 ${won(total)}에 판매할까요?${kept.length ? ` (${kept.length}장은 도감 일반카드란으로)` : ''}`))) return;
   const res = GM.finishOpening(game, meta, kept);
-  if (!res.ok) { $('#bar').insertAdjacentHTML('afterbegin', `<b style="color:var(--bad)">${esc(res.msg || '판매 실패')}</b>`); return; }
+  if (!res.ok) { flashBar(res.msg || '판매 실패'); return; }
+  showDone(res);
+}
+// 카드 1장 처리: where = des / free / sell
+async function dispose(i, where) {
+  if (state !== 'settle' || doneArr()[i]) return;
+  if (where === 'sell' && !(await confirmSell(`${cards[i].def.name}을(를) ${won(cards[i].price * GM.saleMult(game, cards[i].r.id))}에 판매할까요?`))) { snapBack(i); return; }
+  const r = GM.disposeCard(game, meta, i, where);
+  if (!r.ok) { snapBack(i); flashBar(r.msg); return; }
+  const s = slots[i];
+  s.classList.remove('kept', 'ksel');
+  s.style.translate = '';
+  s.classList.add(where === 'sell' ? 'out-right' : where === 'des' ? 'out-up' : 'out-down');
+  persist();
+  updateOpeningHeader();
+  if (r.finish) { showDone(r.finish, r.msg); return; }
+  const live = liveIdx();
+  ksel = live.find(x => x > i) ?? live[0];
+  renderBar();
+  flashBar(r.msg, true);
+}
+function snapBack(i) { const s = slots[i]; if (s) { s.style.translate = ''; s.style.zIndex = ''; } }
+function showDone(res, extra) {
   say(res);
   persist();
   state = 'done';
@@ -146,11 +233,54 @@ function sell(all) {
   updateOpeningHeader();
   renderRemain();
   const b = $('#bar');
-  b.innerHTML = `<span>${esc(res.msg)}</span>
-    ${game.unopened.length ? `<button class="primary" id="nextPack">다음 팩 열기 (남은 ${game.unopened.length})</button>` : ''}<button id="toShop">${game.contest ? '대회장으로' : GM.isBazaar(game) ? '바자회로' : '상점으로'}</button>`;
-  if (game.unopened.length) $('#nextPack').onclick = () => { const r = GM.startOpening(game, meta, 0); persist(); if (r.ok) { updateOpeningHeader(); renderPack(); } };
+  b.innerHTML = `<span>${extra ? esc(extra) + ' · ' : ''}${esc(res.msg)}</span>
+    ${game.unopened.length ? `<button class="primary" id="nextPack">다음 팩 열기 (Enter · 남은 ${game.unopened.length})</button>` : ''}<button id="toShop">${game.contest ? '대회장으로' : GM.isBazaar(game) ? '바자회로' : '상점으로'} (Esc)</button>`;
+  if (game.unopened.length) $('#nextPack').onclick = nextPack;
   $('#toShop').onclick = closeOpening;
 }
+function nextPack() { const r = GM.startOpening(game, meta, 0); persist(); if (r.ok) { updateOpeningHeader(); renderPack(); } }
+
+// 정산 단계: 카드를 끌어서 도감(왼쪽 위 지정 / 왼쪽 아래 일반) 또는 판매(오른쪽)
+let cdrag = null, justDragged = false;
+function dropZone(x, y) {
+  const r = $('#stage').getBoundingClientRect();
+  const fx = (x - r.left) / r.width, fy = (y - r.top) / r.height;
+  if (fx < 0.2) return fy < 0.5 ? 'des' : 'free';
+  if (fx > 0.8) return 'sell';
+  return null;
+}
+$('#table').addEventListener('pointerdown', e => {
+  if (state !== 'settle' || e.target.closest('.zoom')) return;
+  const s = e.target.closest('.slot');
+  if (!s) return;
+  const i = slots.indexOf(s);
+  if (i < 0 || doneArr()[i]) return;
+  cdrag = { i, s, x: e.clientX, y: e.clientY, moved: false, scale: $('#table').getBoundingClientRect().width / 820 };
+});
+addEventListener('pointermove', e => {
+  if (!cdrag) return;
+  const dx = e.clientX - cdrag.x, dy = e.clientY - cdrag.y;
+  if (!cdrag.moved && Math.hypot(dx, dy) < 8) return;
+  cdrag.moved = true;
+  cdrag.s.style.translate = `${dx / cdrag.scale}px ${dy / cdrag.scale}px 120px`;
+  cdrag.s.style.zIndex = 50;
+  $('#opening').classList.add('carddrag');
+  const z = dropZone(e.clientX, e.clientY);
+  document.querySelectorAll('.dz').forEach(el => el.classList.toggle('hot', el.dataset.z === z));
+});
+addEventListener('pointerup', e => {
+  if (!cdrag) return;
+  const d = cdrag; cdrag = null;
+  $('#opening').classList.remove('carddrag');
+  document.querySelectorAll('.dz').forEach(el => el.classList.remove('hot'));
+  if (!d.moved) return;
+  justDragged = true; setTimeout(() => justDragged = false, 50);
+  const z = dropZone(e.clientX, e.clientY);
+  d.s.style.zIndex = '';
+  if (z) dispose(d.i, z); else snapBack(d.i);
+});
+// 끌기 직후의 click은 카드 선택(보관 표시) 토글로 처리하지 않음
+$('#table').addEventListener('click', e => { if (justDragged) { e.stopPropagation(); e.preventDefault(); } }, true);
 
 // ---------- 공통 조각 ----------
 function effectsText(m) {
@@ -190,7 +320,7 @@ function renderMenu() {
     `<button class="mitem${cls ? ' ' + cls : ''}" data-act="${act}"${arg !== undefined ? ` data-arg="${arg}"` : ''}${disabled ? ' disabled' : ''}><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</button>`;
   return `<div class="title">
     <div class="logo"><div class="pk pk-basic"><div class="pk-top"></div><div class="pk-body"><span class="pk-logo">CARDPACK</span></div></div>
-      <div><h1>CARDPACK</h1><p class="muted">랜덤 카드팩 개봉 로그라이크 · 목업 v0.3.1</p></div></div>
+      <div><h1>CARDPACK</h1><p class="muted">랜덤 카드팩 개봉 로그라이크 · 목업 v0.3.2</p></div></div>
     ${msg ? `<div class="msg">${esc(msg)}</div>` : ''}
     <nav class="menu">
       ${item('새로하기', 'new', undefined, '', false, 'primary')}
@@ -199,6 +329,7 @@ function renderMenu() {
       ${item('앨범', 'go', 'album', `수집률 ${Math.round(meta.albumRate * 100)}%`)}
       ${item('해금', 'go', 'unlocks', `${meta.unlocks.length}/${DT.UNLOCKS.length}`)}
       ${item('게임 방법', 'go', 'howto')}
+      ${item('설정', 'settings', undefined, meta.settings && meta.settings.confirmSell === false ? '판매 확인 끔' : '판매 확인 켬')}
       ${item('제작자', 'go', 'credits')}
     </nav>
     <p class="muted foot">플레이 ${meta.games}판 · 대회 통과 ${meta.contests}회 · <a href="demo/unpack.html">개봉 연출 데모</a></p></div>`;
@@ -210,6 +341,18 @@ function renderHowto() {
     <b>1주 = 7일</b>: 3·6일차는 마감 후 <b>바자회</b>(업그레이드는 바자회에서만), 7일차는 <b>카드 언팩 대회</b> — 대회팩 ${DT.TOURNEY.packs}개 점수 합계가 목표에 못 미치면 탈락.<br>
     도감 지정카드 페이지에서 가로줄 4장을 채우면 줄마다 <b>전체 점수 ×${DT.ROW_MULT}</b>. 팩은 뜯지 않고 <b>팩보관함</b>에 보관할 수도 있습니다.</div></div>`;
 }
+function renderSettings() {
+  const on = !meta.settings || meta.settings.confirmSell !== false;
+  return `<div class="narrow"><h1>설정</h1>${btn(settingsBack === 'game' ? '← 게임으로' : '← 메뉴', 'go', settingsBack)}
+    <div class="box setrow" style="margin-top:12px"><div><b>판매 전 확인</b><br><span class="muted">카드를 팔 때(오른쪽으로 끌기, R 키, 일괄 판매) 확인 창을 띄웁니다.</span></div>
+      <button class="switch${on ? ' on' : ''}" data-act="toggleConfirm" aria-pressed="${on}"><span></span>${on ? '켬' : '끔'}</button></div>
+    <h2>키보드</h2><div class="box keys">
+      <p><b>상점</b> <kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd>… 팩 구매(팩에 표시된 키) · <kbd>B</kbd> 도감 열기/닫기</p>
+      <p><b>개봉 전</b> <kbd>←</kbd><kbd>→</kbd> 팩 선택 · <kbd>Q</kbd> 개봉 · <kbd>W</kbd> 팩보관함 · <kbd>E</kbd> 팩 자세히</p>
+      <p><b>뒤집기</b> <kbd>Space</kbd> 모두 뒤집기 · <kbd>←</kbd><kbd>→</kbd> 선택 · <kbd>Enter</kbd> 뒤집기</p>
+      <p><b>정산</b> <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> 카드 선택 · <kbd>Enter</kbd>/<kbd>E</kbd> 상세보기 · <kbd>Q</kbd> 지정카드란 · <kbd>W</kbd> 일반카드란 · <kbd>R</kbd> 판매 · <kbd>Space</kbd> 일괄 판매</p>
+      <p><b>정산 후</b> <kbd>Enter</kbd> 다음 팩 · <kbd>Esc</kbd> 상점으로 · <b>상세보기·도감·확인 창</b> <kbd>Esc</kbd> 닫기</p></div></div>`;
+}
 function renderCredits() {
   return `<div class="narrow"><h1>제작자</h1>${btn('← 메뉴', 'go', 'menu')}
     <div class="credits">
@@ -217,7 +360,7 @@ function renderCredits() {
       <dt>개발</dt><dd>Claude Code (Claude Opus 5.5)</dd>
       <dt>참고작</dt><dd>Balatro · CloverPit · 헌터×헌터 G.I. 바인더</dd>
       <dt>연출 레퍼런스</dt><dd>3D Card Animation (Framer) · Pokémon Cards CSS Holographic (simeydotme) · canigetyourholograph</dd>
-      <dt>버전</dt><dd>목업 v0.3.1 · <a href="https://github.com/agihuimini/cardpack" target="_blank" rel="noopener">GitHub</a></dd></dl>
+      <dt>버전</dt><dd>목업 v0.3.2 · <a href="https://github.com/agihuimini/cardpack" target="_blank" rel="noopener">GitHub</a></dd></dl>
       <p class="muted">카드 그림은 이모지로 대신한 목업입니다.</p>
     </div></div>`;
 }
@@ -295,13 +438,18 @@ function packLook(k) {
   return { cls: 'pk-' + k, hue: 0 };
 }
 // 팩 이미지 버튼. 누르면 act(arg) 실행 (구매 → 바로 개봉, 또는 미개봉 팩 개봉)
+// 상점 팩 단축키: 진열 순서대로 Q W E R, 그 뒤는 A S D F Z X C V
+const HOTKEYS = 'QWERASDFZXCV'.split('');
+let HOT = [];
 function packImg(k, o) {
   const p = DT.PACKS[k], look = packLook(k);
+  let key = '';
+  if (o.hot && HOT.length < HOTKEYS.length) { key = HOTKEYS[HOT.length]; HOT.push({ key, act: o.act, arg: String(o.arg), disabled: !!o.disabled }); }
   return `<button class="pkbtn" data-act="${o.act}" data-arg="${esc(o.arg)}"${o.disabled ? ' disabled' : ''} title="${esc(o.why || p.desc || p.name)}">
     <div class="pk ${look.cls}${o.bundle ? ' bundle' : ''}" style="--hue:${look.hue}">
       <div class="pk-top"></div>
       <div class="pk-body"><span class="pk-logo">CARDPACK</span><b>${esc(p.name)}</b>${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</div>
-      ${o.bundle ? '<span class="pk-x">×5</span>' : ''}${o.badge ? `<span class="pk-badge">${o.badge}</span>` : ''}
+      ${o.bundle ? '<span class="pk-x">×5</span>' : ''}${o.badge ? `<span class="pk-badge">${o.badge}</span>` : ''}${key ? `<kbd class="pk-key">${key}</kbd>` : ''}
     </div>
     <div class="pk-price">${o.price}</div></button>`;
 }
@@ -313,21 +461,22 @@ function renderPacks(m) {
   for (const k of ['basic', 'advanced', 'premium'].filter(k => avail.includes(k))) {
     const p = DT.PACKS[k];
     const ps = GM.packPrice(game, k, 'single', m), pb = GM.packPrice(game, k, 'bundle', m);
-    tiles.push(packImg(k, { act: 'buyPack', arg: k + ':single', price: won(ps), sub: `낱개 · 골드↑ ×${p.boost}`, disabled: !!why(ps, 1), why: why(ps, 1) || `낱개 구매 (골드 이상 확률 ×${(1 + DT.SINGLE_BONUS + m.single).toFixed(1)})` }));
-    tiles.push(packImg(k, { act: 'buyPack', arg: k + ':bundle', bundle: true, price: won(pb) + ' · 5팩', sub: '5팩 묶음 할인', disabled: !!why(pb, 5), why: why(pb, 5) || '5팩 묶음 (할인)' }));
+    tiles.push(packImg(k, { hot: true, act: 'buyPack', arg: k + ':single', price: won(ps), sub: `낱개 · 골드↑ ×${p.boost}`, disabled: !!why(ps, 1), why: why(ps, 1) || `낱개 구매 (골드 이상 확률 ×${(1 + DT.SINGLE_BONUS + m.single).toFixed(1)})` }));
+    tiles.push(packImg(k, { hot: true, act: 'buyPack', arg: k + ':bundle', bundle: true, price: won(pb) + ' · 5팩', sub: '5팩 묶음 할인', disabled: !!why(pb, 5), why: why(pb, 5) || '5팩 묶음 (할인)' }));
   }
   const themes = game.shop.themes.map(k => {
     const p = DT.PACKS[k], price = GM.packPrice(game, k, 'single', m), st = game.shop.stock[k];
     const w = st <= 0 ? '품절' : why(price, 1);
-    return packImg(k, { act: 'buyPack', arg: k + ':single', price: won(price), sub: p.desc, badge: '남은 ' + st, disabled: !!w, why: w || p.desc });
+    return packImg(k, { hot: true, act: 'buyPack', arg: k + ':single', price: won(price), sub: p.desc, badge: '남은 ' + st, disabled: !!w, why: w || p.desc });
   }).join('');
-  return `<h2>📦 카드팩 진열대 <small>팩을 누르면 구매하고 바로 개봉 · 오늘 ${game.packsBought}/${GM.maxPacks(game, m)}팩 · ${DT.PACK_SIZE}장 들이</small></h2>
+  return `<h2>📦 카드팩 진열대 <small>팩을 누르거나 단축키(<kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd>…)로 구매하고 바로 개봉 · <kbd>B</kbd> 도감 · 오늘 ${game.packsBought}/${GM.maxPacks(game, m)}팩 · ${DT.PACK_SIZE}장 들이</small></h2>
     <div class="shelf">${tiles.join('')}</div>
     ${themes ? `<h2>✨ 오늘의 특수 팩 <small>랜덤 등장 · 낱개만 · 재고 2</small></h2><div class="shelf special">${themes}</div>` : ''}`;
 }
 function renderUnopened() {
-  if (!game.unopened.length) return '';
-  const tiles = game.unopened.map((pk, i) => packImg(pk.k, { act: 'open', arg: i, price: '열기', sub: pk.k === 'contest' ? '대회용' : pk.single ? '낱개' : '묶음' })).join('');
+  const resume = game.opening ? packImg(game.opening.k, { act: 'resume', arg: 0, price: '이어서 열기', sub: '개봉 중' }) : '';
+  if (!game.unopened.length && !resume) return '';
+  const tiles = resume + game.unopened.map((pk, i) => packImg(pk.k, { act: 'open', arg: i, price: '열기', sub: pk.k === 'contest' ? '대회용' : pk.single ? '낱개' : '묶음' })).join('');
   return `<h2>📭 미개봉 팩 <small>누르면 개봉 · 한 번에 1팩씩</small></h2><div class="shelf">${tiles}</div>`;
 }
 function renderBazaarCorner(m) {
@@ -335,7 +484,7 @@ function renderBazaarCorner(m) {
   const specials = Object.keys(sh.stock).map(k => {
     const p = DT.PACKS[k], price = GM.packPrice(game, k, 'single', m);
     const w = sh.stock[k] <= 0 ? '품절' : game.money < price ? '돈이 부족합니다' : '';
-    return packImg(k, { act: 'buyPack', arg: k + ':single', price: won(price), sub: p.desc, badge: '남은 ' + sh.stock[k], disabled: !!w, why: w || p.desc });
+    return packImg(k, { hot: true, act: 'buyPack', arg: k + ':single', price: won(price), sub: p.desc, badge: '남은 ' + sh.stock[k], disabled: !!w, why: w || p.desc });
   }).join('');
   let html = `<div class="corner"><h3>🃏 카드 코너 <span class="muted">→ 도감 일반카드 칸</span></h3><div class="shelf">${specials}</div>
     <div class="muted" style="margin-top:8px">특수카드 단품</div><div class="minis">${sh.singles.length ? sh.singles.map((o, i) => mini(o.card, btn('구매 ' + won(o.price), 'buySingle', i, game.money < o.price))).join('') : '<span class="muted">품절</span>'}</div>`;
@@ -434,6 +583,7 @@ function mountBookCards() {
 }
 
 function renderGame() {
+  HOT = [];
   const m = GM.mods(game);
   const bazaar = GM.isBazaar(game), tour = GM.isTourney(game), c = game.contest;
   const week = DT.weekOf(game.day), dw = GM.dow(game);
@@ -442,7 +592,7 @@ function renderGame() {
     <span>💰 <b>${won(game.money)}</b></span>
     ${tour ? `<span>대회 <b>${c.score}</b>/${c.target}점</span>` : bazaar ? '<span class="muted">할당량 지불 완료</span>' : `<span>오늘 할당량 <b>${won(GM.quotaToday(game, m))}</b></span>`}
     <span>전체 점수 ×${GM.scoreMult(game)}</span>
-    <span class="sp">${btn('메뉴', 'go', 'menu')}</span></div>`;
+    <span class="sp">${btn('⚙ 설정', 'settings')} ${btn('메뉴', 'go', 'menu')}</span></div>`;
   if (msg) html += `<div class="msg">${esc(msg)}</div>`;
   if (game.over) {
     return html + `<div class="narrow"><div class="over"><h2>게임 오버</h2><p>${esc(game.log[0] || '')}</p><p><b>${game.survived}일</b> 생존 · 총자산 ${won(GM.totalAssets(game))} · 개봉 ${game.stats.packs}팩 / ${game.stats.cards}장
@@ -492,6 +642,7 @@ function render() {
   else if (screen === 'unlocks') app.innerHTML = renderUnlocks();
   else if (screen === 'howto') app.innerHTML = renderHowto();
   else if (screen === 'credits') app.innerHTML = renderCredits();
+  else if (screen === 'settings') app.innerHTML = renderSettings();
   else app.innerHTML = renderMenu();
   if (screen === 'game' && game && !game.over && bookOpen) mountBookCards();
   document.body.style.overflow = bookOpen && screen === 'game' ? 'hidden' : $('#opening').hidden ? '' : 'hidden';
@@ -517,6 +668,9 @@ const actions = {
     if (r.ok) actions.open(game.unopened.length - (kind === 'bundle' && !DT.PACKS[k].theme && !DT.PACKS[k].bazaar ? 5 : 1));
   },
   book() { bookOpen = !bookOpen; if (!bookOpen) selUid = null; },
+  settings() { settingsBack = screen === 'game' && game && !game.over ? 'game' : 'menu'; screen = 'settings'; bookOpen = false; window.scrollTo(0, 0); },
+  toggleConfirm() { meta.settings = meta.settings || {}; meta.settings.confirmSell = meta.settings.confirmSell === false; },
+  resume() { if (game.opening) setTimeout(showOpening, 0); },
   openVault(i) {
     const r = GM.openVault(game, meta, +i);
     if (!r.ok) { say(r); return; }
@@ -573,8 +727,70 @@ $('#app').addEventListener('click', e => {
   render();
 });
 
+// ---------- 키보드 ----------
+function moveSel(key) {
+  const live = state === 'settle' ? liveIdx() : slots.map((x, i) => i).filter(i => !slots[i].classList.contains('flipped'));
+  if (!live.length) return;
+  const n = cards.length, top = Math.ceil(n / 2);
+  let i = live.includes(ksel) ? ksel : live[0];
+  if (key === 'ArrowRight') i = live.find(x => x > i) ?? live[0];
+  if (key === 'ArrowLeft') i = [...live].reverse().find(x => x < i) ?? live[live.length - 1];
+  if (key === 'ArrowDown' || key === 'ArrowUp') {
+    // 위 줄(0..top-1) ↔ 아래 줄: 같은 열 근처의 카드로
+    const col = i < top ? i - (top - 1) / 2 : i - top - (n - top - 1) / 2;
+    const rows = key === 'ArrowDown' ? live.filter(x => x >= top) : live.filter(x => x < top);
+    if (rows.length) i = rows.reduce((b, x) => { const c = x < top ? x - (top - 1) / 2 : x - top - (n - top - 1) / 2; return Math.abs(c - col) < Math.abs((b < top ? b - (top - 1) / 2 : b - top - (n - top - 1) / 2) - col) ? x : b; }, rows[0]);
+  }
+  ksel = i;
+  markSel();
+}
 addEventListener('keydown', e => {
-  if (e.key === 'Escape' && bookOpen && !$('#modal').classList.contains('open')) { bookOpen = false; selUid = null; render(); }
+  if (e.target.matches && e.target.matches('input, select, textarea')) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+  const hit = () => e.preventDefault();
+  // 판매 확인 창
+  if (confirmResolve) { if (k === 'Enter') { hit(); confirmResolve(true); } else if (k === 'Escape') { hit(); confirmResolve(false); } return; }
+  // 카드 상세보기
+  if ($('#modal').classList.contains('open')) { if (['Escape', 'Enter', 'E'].includes(k)) { hit(); $('#mClose').click(); } return; }
+  // 개봉 화면
+  if (!$('#opening').hidden) {
+    if (state === 'tearing' || busy) { if ([' ', 'Enter'].includes(k)) { hit(); skip(); } return; }
+    if (state === 'pack') {
+      if (!$('#packInfo').hidden) { if (['E', 'Escape'].includes(k)) { hit(); packInfo(false); } return; }
+      if (k === 'ArrowRight') { hit(); cycle(1); }
+      else if (k === 'ArrowLeft') { hit(); cycle(-1); }
+      else if (k === 'Q' || k === 'Enter') { hit(); tearPack(false); }
+      else if (k === 'W') { hit(); if (game.opening.k !== 'contest') afterKeep(); }
+      else if (k === 'E') { hit(); packInfo(true); }
+    } else if (state === 'reveal') {
+      if (k === ' ') { hit(); flipAll(); }
+      else if (k.startsWith('Arrow')) { hit(); moveSel(k); }
+      else if (k === 'Enter') { hit(); onCardClick(null, ksel); }
+    } else if (state === 'settle') {
+      if (k.startsWith('Arrow')) { hit(); moveSel(k); }
+      else if (k === 'Enter' || k === 'E') { hit(); openInspect(ksel); }
+      else if (k === 'Q') { hit(); dispose(ksel, 'des'); }
+      else if (k === 'W') { hit(); dispose(ksel, 'free'); }
+      else if (k === 'R') { hit(); dispose(ksel, 'sell'); }
+      else if (k === ' ') { hit(); sell(true); }
+    } else if (state === 'done') {
+      if (k === 'Enter' && game.unopened.length) { hit(); nextPack(); }
+      else if (k === 'Escape' || k === 'Enter') { hit(); closeOpening(); }
+    }
+    return;
+  }
+  if (screen !== 'game' || !game || game.over) return;
+  // 도감
+  if (bookOpen) {
+    if (k === 'Escape' || k === 'B') { hit(); bookOpen = false; selUid = null; render(); }
+    else if (k === 'ArrowRight' || k === 'ArrowLeft') { hit(); const d = k === 'ArrowRight' ? 1 : -1; const np = bookPage + d; if (np >= 0 && np <= VAULT_PAGE) { actions.turn(d); render(); } }
+    return;
+  }
+  if (k === 'B') { hit(); actions.book(); render(); return; }
+  // 상점 팩 단축키
+  const h = HOT.find(x => x.key === k);
+  if (h) { hit(); if (h.disabled) { msg = '지금은 살 수 없는 팩입니다 (' + k + ')'; render(); return; } actions[h.act](h.arg); persist(); render(); }
 });
 
 render();

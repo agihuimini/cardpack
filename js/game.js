@@ -27,7 +27,7 @@
 
   // ---------- 메타 (앨범/기록/해금) ----------
   function newMeta() {
-    return { album: {}, records: [], bestDays: 0, unlocks: [], albumRate: 0, games: 0, contests: 0 };
+    return { album: {}, records: [], bestDays: 0, unlocks: [], albumRate: 0, games: 0, contests: 0, settings: { confirmSell: true } };
   }
   function albumEntry(meta, d) { return meta.album[d] || (meta.album[d] = { s: 0, fin: [], bestW: 0 }); }
   function markSeen(meta, d) { const a = albumEntry(meta, d); if (!a.s) a.s = 1; }
@@ -394,11 +394,70 @@
     const pk = state.unopened[idx];
     if (!pk) return { ok: false, msg: '열 팩이 없습니다.' };
     state.unopened.splice(idx, 1);
-    const m = mods(state);
-    const cards = rollPack(state, pk.k, pk.single, m);
-    state.effects = state.effects.filter(e => !('packs' in e) || --e.packs > 0);
+    let cards = pk.cards;
+    if (!cards) {
+      cards = rollPack(state, pk.k, pk.single, mods(state));
+      state.effects = state.effects.filter(e => !('packs' in e) || --e.packs > 0);
+    }
     state.opening = { k: pk.k, single: pk.single, cards };
     return { ok: true, cards };
+  }
+  // 개봉 차례의 팩 바꾸기 (←/→): 지금 팩은 내용물이 정해진 채 미개봉 목록으로 돌아감
+  function cyclePack(state, dir) {
+    const op = state.opening;
+    if (!op || op.done || !state.unopened.length) return { ok: false };
+    const cur = { k: op.k, single: op.single, cards: op.cards };
+    let next;
+    if (dir > 0) { next = state.unopened.shift(); state.unopened.push(cur); }
+    else { next = state.unopened.pop(); state.unopened.unshift(cur); }
+    state.unopened.unshift(next);
+    state.opening = null;
+    return startOpening(state, null, 0);
+  }
+  // 팩 자세히 보기: 등급 확률 (분류 행운 제외한 근사)
+  function packOdds(state, key, single) {
+    const p = PACKS[key], m = mods(state);
+    const hiMult = (1 + m.hi) * (single ? 1 + D.SINGLE_BONUS + m.single : 1);
+    const list = C.R.filter(x => (p.grades ? p.grades.includes(x.id) : D.GRADE_P[x.id] > 0));
+    const P = x => D.GRADE_P[x.id] || 0.001, k = p.boost * hiMult;
+    const rare = list.filter(x => x.tier >= 1).reduce((s, x) => s + P(x), 0);
+    const w = list.map(x => x.tier >= 1 ? P(x) * k : x.id === 'common' ? Math.max(1, P(x) - rare * (k - 1)) : P(x));
+    const tot = w.reduce((a, b) => a + b, 0);
+    return list.map((x, i) => ({ id: x.id, name: x.name, pct: w[i] / tot * 100 }));
+  }
+  // 정산 후 카드 1장 처리: where = 'des'(지정카드란) / 'free'(일반카드란) / 'sell'(판매)
+  function disposeCard(state, meta, i, where) {
+    const op = state.opening;
+    if (!op) return { ok: false };
+    op.done = op.done || [];
+    if (op.done[i]) return { ok: false, msg: '이미 처리한 카드입니다.' };
+    const s = op.cards[i];
+    const clean = { u: s.u, d: s.d, r: s.r, f: s.f, w: s.w, bm: s.bm, p: s.p, n: s.n };
+    let msg;
+    if (where === 'sell') {
+      const v = saleValue(state, s);
+      addMoney(state, v);
+      state.stats.earned += v;
+      op.sold = r2((op.sold || 0) + v);
+      msg = cardLabel(s) + ' 판매 +' + v;
+    } else if (where === 'free') {
+      if (!putFree(state, clean)) return { ok: false, msg: '도감 일반카드란이 가득 찼습니다.' };
+      markCollected(meta, clean);
+      msg = cardLabel(s) + ' → 일반카드란';
+    } else if (where === 'des') {
+      const old = state.binder.des[s.d];
+      if (old && !freeRoom(state)) return { ok: false, msg: '지정칸의 기존 카드를 옮길 일반카드란이 없습니다.' };
+      const before = completedRows(state).length;
+      if (old) putFree(state, old);
+      state.binder.des[s.d] = clean;
+      markCollected(meta, clean);
+      msg = cardLabel(s) + ' → 지정카드란' + (old ? ' (기존 카드는 일반카드란으로)' : '') + (completedRows(state).length > before ? ` · 🎉 가로줄 완성! 전체 점수 ×${scoreMult(state)}` : '');
+    } else return { ok: false };
+    if (!state.stats.best || s.p > state.stats.best.p) state.stats.best = clean;
+    op.done[i] = where;
+    const res = { ok: true, msg };
+    if (op.done.filter(Boolean).length === op.cards.length) res.finish = finishOpening(state, meta, []);
+    return res;
   }
   // 개봉할 차례의 팩을 뜯지 않고 도감 팩보관함에 통째로 보관 (안의 카드는 이미 정해진 그대로)
   function keepSealed(state) {
@@ -426,6 +485,7 @@
     const op = state.opening;
     if (!op) return { ok: false };
     if (kept.length > freeRoom(state)) return { ok: false, msg: '도감 일반카드 칸이 부족합니다.' };
+    const done = op.done || [];
     const m = mods(state);
     op.cards.forEach(s => markSeen(meta, s.d));
     state.stats.packs++;
@@ -433,6 +493,7 @@
     let sum = 0;
     const packScore = r2(op.cards.reduce((s, c) => s + c.p, 0) * scoreMult(state));
     op.cards.forEach((s, i) => {
+      if (done[i]) return;
       const clean = { u: s.u, d: s.d, r: s.r, f: s.f, w: s.w, bm: s.bm, p: s.p, n: s.n };
       if (!state.stats.best || s.p > state.stats.best.p) state.stats.best = clean;
       if (kept.includes(i)) { putFree(state, clean); markCollected(meta, clean); }
@@ -441,6 +502,8 @@
     sum = r2(sum);
     addMoney(state, sum);
     state.stats.earned += sum;
+    sum = r2(sum + (op.sold || 0));
+    const toBinder = kept.length + done.filter(x => x === 'des' || x === 'free').length;
     state.opening = null;
     let contestNote = '';
     if (op.k === 'contest' && state.contest) {
@@ -449,8 +512,8 @@
       contestNote = ` · 대회 점수 +${packScore} (합계 ${state.contest.score}/${state.contest.target})`;
     }
     const fresh = refreshMeta(meta);
-    log(state, `${PACKS[op.k].name} 정산: ${op.cards.length - kept.length}장 판매 +${sum}${kept.length ? `, ${kept.length}장 도감` : ''}${contestNote}`);
-    return { ok: true, sum, packScore, msg: `+${sum}원${kept.length ? ` · ${kept.length}장 도감(임시칸)` : ''}${contestNote}`, unlocked: fresh };
+    log(state, `${PACKS[op.k].name} 정산: ${op.cards.length - toBinder}장 판매 +${sum}${toBinder ? `, ${toBinder}장 도감` : ''}${contestNote}`);
+    return { ok: true, sum, packScore, msg: `+${sum}원${toBinder ? ` · ${toBinder}장 도감` : ''}${contestNote}`, unlocked: fresh };
   }
 
   // ---------- 도감 카드 판매 ----------
@@ -593,7 +656,7 @@
     D, newMeta, refreshMeta, markSeen, newGame, startDay, mods, dow, isTourney, isBazaar, bazaarAfterToday, maxPacks, quotaToday,
     showcaseSlots, saleMult, saleValue, scoreMult, completedRows, hydrate, inspectable, cardLabel, isEvent, allBinder, findCard, freeRoom,
     placeDesignated, unplace, autoArrange, packPrice, availablePacks, buyPack, buyItem, upgradePrice, buyUpgrade, useItem, sellShowcase,
-    startOpening, keepSealed, openVault, finishOpening, sellCard, binderValue, buySingle, npcAction, collectorPrice, pay, leaveBazaar, finishContest,
+    startOpening, cyclePack, packOdds, disposeCard, keepSealed, openVault, finishOpening, sellCard, binderValue, buySingle, npcAction, collectorPrice, pay, leaveBazaar, finishContest,
     totalAssets, gameOver, rollPack, r2,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = G;

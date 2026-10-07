@@ -168,6 +168,53 @@ th{color:var(--muted);font-weight:500}
 .vslot{width:96px;height:136px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#6b6380;
   background:linear-gradient(180deg,#1d1826,#231d2e);box-shadow:inset 0 4px 10px rgba(0,0,0,.7),inset 0 -1px 0 rgba(255,255,255,.06)}
 
+
+/* ---------- 정산 카드 끌기 / 키보드 선택 ---------- */
+.dz{position:absolute;z-index:4;display:none;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;
+  border:2px dashed rgba(255,255,255,.35);border-radius:16px;background:rgba(20,24,34,.55);color:#dfe3ee;font-size:14px;pointer-events:none;transition:background .15s,border-color .15s,transform .15s}
+.dz small{font-size:11px;color:var(--muted)}
+.dz-des{left:10px;top:10px;width:18%;height:calc(50% - 15px)}
+.dz-free{left:10px;bottom:10px;width:18%;height:calc(50% - 15px)}
+.dz-sell{right:10px;top:10px;bottom:10px;width:18%}
+.dz-vault{left:10px;top:20%;bottom:20%;width:20%}
+.dz.hot{background:rgba(91,140,255,.28);border-color:#8fb0ff;border-style:solid;transform:scale(1.03)}
+.dz-sell.hot{background:rgba(255,200,80,.22);border-color:#ffd76a}
+#opening.carddrag .dz-des,#opening.carddrag .dz-free,#opening.carddrag .dz-sell{display:flex}
+#stage:has(#pack.pull-left) .dz-vault{display:flex;background:rgba(43,182,115,.18);border-color:#2bb673}
+#opening.carddrag #remainPacks{display:none}
+.slot.ksel .card{outline:3px solid #ffd76a;outline-offset:4px;border-radius:.9em}
+.slot.out-up,.slot.out-down,.slot.out-right{transition:translate .35s ease-in,opacity .35s ease-in!important;opacity:0;pointer-events:none}
+.slot.out-up{translate:-420px -160px 0}
+.slot.out-down{translate:-420px 160px 0}
+.slot.out-right{translate:420px 0 0}
+kbd{display:inline-block;min-width:1.5em;padding:0 .35em;border:1px solid #4a5068;border-bottom-width:2px;border-radius:4px;background:#232736;color:#e8e9ee;font:600 11px/1.6 ui-monospace,Menlo,monospace;text-align:center;margin:0 1px}
+.pk-key{position:absolute;left:-7px;top:-9px;min-width:22px;font-size:12px;line-height:20px;background:#14161c;border-color:#8fb0ff;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+
+/* 팩 자세히 보기 */
+#packInfo{position:absolute;inset:0;z-index:35;display:flex;align-items:center;justify-content:center;background:rgba(8,10,16,.6);padding:16px}
+#packInfo[hidden]{display:none}
+.pibox{display:flex;gap:20px;align-items:flex-start;max-width:560px;width:100%;padding:18px;border-radius:14px;background:var(--panel);border:1px solid #3a4058;box-shadow:0 20px 50px rgba(0,0,0,.6)}
+.pibox h3{margin:0 0 4px}
+.pibox .pk{flex:none}
+.pibox table{width:auto;margin:6px 0}
+.pibox td{padding:2px 14px 2px 0;border:0}
+@media (max-width:520px){.pibox{flex-direction:column;align-items:center}}
+
+/* 판매 확인 */
+#confirm{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;background:rgba(8,10,16,.55);padding:16px}
+#confirm[hidden]{display:none}
+.cbox{max-width:380px;width:100%;padding:18px;border-radius:14px;background:var(--panel);border:1px solid #3a4058;box-shadow:0 20px 50px rgba(0,0,0,.6)}
+.cbox p{margin:0 0 14px;font-size:15px;line-height:1.5}
+
+/* 설정 */
+.setrow{display:flex;justify-content:space-between;align-items:center;gap:16px}
+.switch{display:flex;align-items:center;gap:8px;flex:none;padding:6px 12px}
+.switch span{width:36px;height:20px;border-radius:10px;background:#3a3f50;position:relative;transition:background .2s}
+.switch span::after{content:"";position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s}
+.switch.on span{background:var(--good)}
+.switch.on span::after{left:18px}
+.keys p{margin:6px 0;line-height:1.9}
+
 /* ---------- 도감 버튼(왼쪽 아래) + 떠서 열리는 도감 ---------- */
 .binder-fab{position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:15;display:flex;flex-direction:column;align-items:flex-start;gap:2px;
   padding:10px 16px;border-radius:14px;font-weight:800;font-size:15px;background:linear-gradient(160deg,#2a3150,#1d2235);border:1px solid #4a5478;box-shadow:0 10px 26px rgba(0,0,0,.5)}
@@ -258,10 +305,17 @@ th{color:var(--muted);font-weight:500}
   <div id="stage">
     <div id="settleList"></div>
     <div id="remainPacks"></div>
+    <div class="dz dz-des" data-z="des"><b>📖 지정카드란</b><small>여기로 끌기 · Q</small></div>
+    <div class="dz dz-free" data-z="free"><b>🗂️ 일반카드란</b><small>여기로 끌기 · W</small></div>
+    <div class="dz dz-sell" data-z="sell"><b>💰 판매</b><small>여기로 끌기 · R</small></div>
+    <div class="dz dz-vault"><b>📦 팩보관함</b><small>놓으면 뜯지 않고 보관</small></div>
     <div id="table"></div>
   </div>
   <footer id="bar"></footer>
+  <div id="packInfo" hidden></div>
 </div>
+<div id="confirm" hidden><div class="cbox"><p id="cMsg"></p><div class="row"><button id="cOk" class="primary">확인 (Enter)</button><button id="cNo">취소 (Esc)</button></div>
+  <p class="muted" style="margin:10px 0 0;font-size:12px">설정에서 판매 전 확인을 끌 수 있습니다.</p></div></div>
 <canvas id="fx"></canvas>
 <div id="flash"></div>
 <div id="modal">

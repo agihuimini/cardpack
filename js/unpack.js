@@ -84,7 +84,18 @@ function bindPackDrag(pack) {
   });
   pack.addEventListener('pointermove', e => {
     if (!d) return;
-    const dx = Math.abs(e.clientX - d.x);
+    const raw = e.clientX - d.x;
+    // 페이지가 PACK_DRAG_LEFT 를 지정하면: 왼쪽으로 끌기 = 팩째로 치우기(찢지 않음), 오른쪽으로 끌기 = 찢기
+    if (window.PACK_DRAG_LEFT && raw < 0) {
+      if (!d.moved && raw > -6) return;
+      d.moved = true; d.left = raw; d.p = 0;
+      pack.classList.add('dragging', 'pull-left');
+      pack.style.setProperty('--p', 0); top.style.transform = '';
+      pack.style.transform = `translateX(${raw}px) rotate(${raw / 30}deg) scale(${Math.max(.75, 1 + raw / 1200)})`;
+      return;
+    }
+    if (d.left) { d.left = 0; pack.classList.remove('pull-left'); }
+    const dx = window.PACK_DRAG_LEFT ? Math.max(0, raw) : Math.abs(raw);
     if (!d.moved && dx < 6) return;
     d.moved = true; pack.classList.add('dragging');
     const now = performance.now();
@@ -96,8 +107,12 @@ function bindPackDrag(pack) {
   });
   const end = () => {
     if (!d) return;
-    const {p, v, moved} = d; d = null;
-    pack.classList.remove('dragging');
+    const {p, v, moved, left} = d; d = null;
+    pack.classList.remove('dragging', 'pull-left');
+    if (left) { // 왼쪽으로 충분히 끌었으면 페이지 콜백, 아니면 제자리로
+      if (left < -110) window.PACK_DRAG_LEFT(); else { pack.style.transform = ''; }
+      return;
+    }
     if (!moved) { tearPack(false); return; }
     if (v > FLICK_V && p > .15) tearPack(true);
     else if (p >= TEAR_DONE) tearPack(false);
