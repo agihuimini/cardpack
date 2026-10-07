@@ -3,6 +3,7 @@
 //   변수 state, cards, slots, busy, tearAt / 함수 rollPack, renderPack, renderBar, sell
 const GM = window.CPGame, DT = window.CPData, SV = window.CPStore;
 window.QUICK_FLIP_ALL = true; // [모두 뒤집기]는 고등급 지연 연출 없이 한꺼번에
+window.STACK_REVEAL = true;   // 뜯으면 뒷면 뭉치 → 한 장씩 뒤집고 넘기기 (데모는 부채꼴 그대로)
 
 // ---------- 연출 엔진 훅 (전역) ----------
 let state = 'idle', cards = [], slots = [], busy = false, tearAt = 0;
@@ -124,7 +125,7 @@ const liveIdx = () => cards.map((c, i) => i).filter(i => !doneArr()[i]);
 function keptIdx() { return slots.map((s, i) => s.classList.contains('kept') && !doneArr()[i] ? i : -1).filter(i => i >= 0); }
 // 키보드 선택 표시
 function markSel() {
-  slots.forEach((s, i) => s.classList.toggle('ksel', (state === 'settle' || state === 'reveal') && i === ksel));
+  slots.forEach((s, i) => s.classList.toggle('ksel', (state === 'settle' || (state === 'reveal' && !window.STACK_REVEAL)) && i === ksel));
 }
 
 function renderBar() {
@@ -143,8 +144,9 @@ function renderBar() {
   else if (state === 'tearing') b.innerHTML = `<span class="hint">… (클릭하면 스킵)</span>`;
   else if (state === 'settling') b.innerHTML = `<span class="hint">…</span>`;
   else if (state === 'reveal') {
-    b.innerHTML = `<button class="primary" id="all" ${busy ? 'disabled' : ''}>모두 뒤집기 (Space)</button>
-      <span class="hint">${busy ? '연출 중 · 카드를 클릭하면 스킵' : '카드 클릭 = 한 장씩 뒤집기 · <kbd>←</kbd><kbd>→</kbd> 선택 <kbd>Enter</kbd> 뒤집기 · 뒤집힌 카드 클릭/🔍 = 자세히'}</span>`;
+    const first = slots.length && !slots[0].classList.contains('flipped');
+    b.innerHTML = `<button class="primary" id="all" ${busy ? 'disabled' : ''}>모두 펼치기 (Space)</button>
+      <span class="hint">${busy ? '연출 중 · 카드를 클릭하면 스킵' : first ? '카드 뭉치를 클릭하면 뒤집힘 · <kbd>Enter</kbd>' : '맨 위 카드를 클릭하거나 옆으로 끌어 넘기기 · <kbd>Enter</kbd> 넘기기 · 살짝 끌면 다음 카드의 기운이 보일 수도…'}</span>`;
     if (!busy) $('#all').onclick = flipAll;
     markSel();
   } else if (state === 'settle') {
@@ -271,6 +273,7 @@ addEventListener('pointermove', e => {
   const dx = e.clientX - cdrag.x, dy = e.clientY - cdrag.y;
   if (!cdrag.moved && Math.hypot(dx, dy) < 8) return;
   cdrag.moved = true;
+  cdrag.s.classList.add('cd');
   cdrag.s.style.translate = `${dx / cdrag.scale}px ${dy / cdrag.scale}px 120px`;
   cdrag.s.style.zIndex = 50;
   $('#opening').classList.add('carddrag');
@@ -280,6 +283,7 @@ addEventListener('pointermove', e => {
 addEventListener('pointerup', e => {
   if (!cdrag) return;
   const d = cdrag; cdrag = null;
+  d.s.classList.remove('cd');
   $('#opening').classList.remove('carddrag');
   document.querySelectorAll('.dz').forEach(el => el.classList.remove('hot'));
   if (!d.moved) return;
@@ -329,7 +333,7 @@ function renderMenu() {
     `<button class="mitem${cls ? ' ' + cls : ''}" data-act="${act}"${arg !== undefined ? ` data-arg="${arg}"` : ''}${disabled ? ' disabled' : ''}><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</button>`;
   return `<div class="title">
     <div class="logo"><div class="pk pk-basic"><div class="pk-top"></div><div class="pk-body"><span class="pk-logo">CARDPACK</span></div></div>
-      <div><h1>CARDPACK</h1><p class="muted">랜덤 카드팩 개봉 로그라이크 · 목업 v0.3.2</p></div></div>
+      <div><h1>CARDPACK</h1><p class="muted">랜덤 카드팩 개봉 로그라이크 · 목업 v0.3.3</p></div></div>
     ${msg ? `<div class="msg">${esc(msg)}</div>` : ''}
     <nav class="menu">
       ${item('새로하기', 'new', undefined, '', false, 'primary')}
@@ -358,7 +362,7 @@ function renderSettings() {
     <h2>키보드</h2><div class="box keys">
       <p><b>상점</b> <kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd>… 팩 구매(팩에 표시된 키) · <kbd>B</kbd> 도감 열기/닫기</p>
       <p><b>개봉 전</b> <kbd>←</kbd><kbd>→</kbd> 팩 선택 · <kbd>Q</kbd> 개봉 · <kbd>W</kbd> 팩보관함 · <kbd>E</kbd> 팩 자세히</p>
-      <p><b>뒤집기</b> <kbd>Space</kbd> 모두 뒤집기 · <kbd>←</kbd><kbd>→</kbd> 선택 · <kbd>Enter</kbd> 뒤집기</p>
+      <p><b>카드 뭉치</b> <kbd>Enter</kbd>/<kbd>→</kbd> 뒤집기·한 장씩 넘기기 · <kbd>Space</kbd> 모두 펼치기 · 마우스로 맨 위 카드를 끌어도 넘어감</p>
       <p><b>정산</b> <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> 카드 선택 · <kbd>Enter</kbd>/<kbd>E</kbd> 상세보기 · <kbd>Q</kbd> 지정카드란 · <kbd>W</kbd> 일반카드란 · <kbd>R</kbd> 판매 · <kbd>Space</kbd> 일괄 판매</p>
       <p><b>정산 후</b> <kbd>Enter</kbd> 다음 팩 · <kbd>Esc</kbd> 상점으로 · <b>상세보기·도감·확인 창</b> <kbd>Esc</kbd> 닫기</p></div></div>`;
 }
@@ -369,7 +373,7 @@ function renderCredits() {
       <dt>개발</dt><dd>Claude Code (Claude Opus 5.5)</dd>
       <dt>참고작</dt><dd>Balatro · CloverPit · 헌터×헌터 G.I. 바인더</dd>
       <dt>연출 레퍼런스</dt><dd>3D Card Animation (Framer) · Pokémon Cards CSS Holographic (simeydotme) · canigetyourholograph</dd>
-      <dt>버전</dt><dd>목업 v0.3.2 · <a href="https://github.com/agihuimini/cardpack" target="_blank" rel="noopener">GitHub</a></dd></dl>
+      <dt>버전</dt><dd>목업 v0.3.3 · <a href="https://github.com/agihuimini/cardpack" target="_blank" rel="noopener">GitHub</a></dd></dl>
       <p class="muted">카드 그림은 이모지로 대신한 목업입니다.</p>
     </div></div>`;
 }
@@ -744,7 +748,7 @@ function moveSel(key) {
   let i = live.includes(ksel) ? ksel : live[0];
   if (key === 'ArrowRight') i = live.find(x => x > i) ?? live[0];
   if (key === 'ArrowLeft') i = [...live].reverse().find(x => x < i) ?? live[live.length - 1];
-  if (key === 'ArrowDown' || key === 'ArrowUp') {
+  if ((key === 'ArrowDown' || key === 'ArrowUp') && !window.STACK_REVEAL) {
     // 위 줄(0..top-1) ↔ 아래 줄: 같은 열 근처의 카드로
     const col = i < top ? i - (top - 1) / 2 : i - top - (n - top - 1) / 2;
     const rows = key === 'ArrowDown' ? live.filter(x => x >= top) : live.filter(x => x < top);
@@ -774,8 +778,7 @@ addEventListener('keydown', e => {
       else if (k === 'E') { hit(); packInfo(true); }
     } else if (state === 'reveal') {
       if (k === ' ') { hit(); flipAll(); }
-      else if (k.startsWith('Arrow')) { hit(); moveSel(k); }
-      else if (k === 'Enter') { hit(); onCardClick(null, ksel); }
+      else if (k === 'Enter' || k === 'ArrowRight') { hit(); stackClick(); }
     } else if (state === 'settle') {
       if (k.startsWith('Arrow')) { hit(); moveSel(k); }
       else if (k === 'Enter' || k === 'E') { hit(); openInspect(ksel); }

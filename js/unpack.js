@@ -143,15 +143,19 @@ async function tearPack(hard) {
   pack.classList.add('gone');
   openMask = cards.map(() => false); curContribs = [];
   const t = $('#table');
-  t.classList.add('fan');
+  const stack = !!window.STACK_REVEAL;
+  t.classList.add(stack ? 'stackmode' : 'fan');
   slots = cards.map((c, i) => {
     const s = document.createElement('div');
     s.className = 'slot init' + (c.r.tier >= 2 ? ` leaky lk-${c.r.id}` : '');
     // 장수에 맞춰 부채꼴 중심·2줄 격자 배치 (9장이면 원래 데모 배치와 같음: 5장 + 4장)
     const n = cards.length, k = i - (n - 1) / 2, top = Math.ceil(n / 2), row1 = i < top;
     const j = row1 ? i : i - top, rowN = row1 ? top : n - top;
-    s.style.cssText = `--i:${i};--k:${k};--k2:${k * k};--gx:${(j - (rowN - 1) / 2) * 160}px;--gy:${row1 ? -140 : 120}px`;
-    s.innerHTML = `<div class="shaker"></div><div class="tag"></div><div class="keep-badge">보관</div>`;
+    s.style.cssText = `--i:${i};--k:${k};--k2:${k * k};--gx:${(j - (rowN - 1) / 2) * 160}px;--gy:${row1 ? -140 : 120}px` +
+      // 쌓아 두기 모드: --d = 뭉치 안 깊이(맨 위 카드가 가장 큼), --rx = 아래 줄에 놓일 가로 위치
+      `;--d:${n - 1 - i};--rx:${(i - (n - 1) / 2) * 116}px;--pgc:${PEEK_COLOR(c)}`;
+    if (stack) s.classList.add('st-pile');
+    s.innerHTML = `<div class="pglow"></div><div class="shaker"></div><div class="tag"></div><div class="keep-badge">보관</div>`;
     const card = cardEl(c);
     s.querySelector('.shaker').appendChild(card);
     bindTilt(card);
@@ -319,11 +323,16 @@ async function run(task) {
   busy = true; fast = false; renderBar();
   await task();
   busy = false; fast = false; skipFns = [];
-  if (slots.every(s => s.classList.contains('flipped'))) await settle(); else renderBar();
+  const allDone = window.STACK_REVEAL ? slots.every(s => s.classList.contains('st-row')) : slots.every(s => s.classList.contains('flipped'));
+  if (allDone) await settle(); else renderBar();
 }
 
 function onCardClick(e, i) {
   if (busy) { skip(); return; }
+  if (state === 'reveal' && window.STACK_REVEAL) {
+    if (slots[i].classList.contains('st-row')) openInspect(i); else stackClick();
+    return;
+  }
   if (state === 'reveal') {
     if (slots[i].classList.contains('flipped')) openInspect(i);
     else run(async () => { await flipOne(i); await score([i]); });
@@ -333,6 +342,7 @@ function onCardClick(e, i) {
 }
 
 function flipAll() {
+  if (window.STACK_REVEAL) { stackAll(); return; }
   run(async () => {
     const pending = slots.map((s, i) => i).filter(i => !slots[i].classList.contains('flipped'));
     // 페이지가 QUICK_FLIP_ALL = true 로 두면 [모두 뒤집기] 시 고등급의 흔들림·느린 뒤집기 없이 한꺼번에 뒤집고 번쩍임만 1번
@@ -353,12 +363,95 @@ function flipAll() {
   });
 }
 
+// ---------- 쌓아 두기 모드 (STACK_REVEAL) ----------
+// 뜯으면 뒷면 뭉치 → 클릭: 맨 위 카드 뒤집기 → 클릭·끌기: 맨 위 카드를 아래 줄로 넘기고 다음 카드 확인
+// 다음 카드가 골드(A) 이상(또는 홀로·블랙 마감)이면 맨 위 카드를 살짝만 끌어도 밑에서 후광이 새어나옴
+function PEEK_COLOR(c) {
+  return ({ gold: '#ffd76a', plat: '#9fe3ff', diamond: '#cff4ff', rare: '#ff9ff3', epic: '#c77dff', legend: '#ff4d4d', event: '#fff2a0' })[c.r.id] || '#ffd76a';
+}
+const stackTop = () => slots.findIndex(s => !s.classList.contains('st-row'));
+function stackClick() {
+  const top = stackTop();
+  if (top < 0) return;
+  if (!slots[top].classList.contains('flipped')) {
+    run(async () => {
+      await flipOne(top);
+      // 뭉치째 뒤집은 것처럼: 밑의 카드들도 앞면 상태 (아직 가려져 있음)
+      slots.forEach(s => { if (!s.classList.contains('st-row')) { s.querySelector('.inner').style.setProperty('--fd', '0s'); s.classList.add('flipped'); } });
+      await score([top]);
+    });
+  } else run(layTop);
+}
+async function layTop() {
+  const top = stackTop();
+  if (top < 0) return;
+  const s = slots[top];
+  s.style.translate = ''; s.style.zIndex = '';
+  slots.forEach(x => x.classList.remove('peekglow'));
+  s.classList.remove('st-pile'); s.classList.add('st-row');
+  const next = stackTop();
+  await wait(fast ? 60 : 260);
+  if (next >= 0) {
+    const tier = fxTier(cards[next]);
+    if (tier > 0) flash(tier);
+    await score([next]);
+  }
+}
+function stackAll() {
+  run(async () => {
+    const top = stackTop();
+    if (top < 0) return;
+    const pend = slots.map((s, i) => i).filter(i => !slots[i].classList.contains('st-row'));
+    pend.forEach(i => { slots[i].querySelector('.inner').style.setProperty('--fd', '.35s'); slots[i].classList.add('flipped'); });
+    for (const i of pend) { slots[i].classList.remove('st-pile'); slots[i].classList.add('st-row'); await wait(70); }
+    await wait(300);
+    const t = Math.max(0, ...pend.map(i => fxTier(cards[i])));
+    if (t > 0) flash(t);
+    await score(pend.filter(i => !openMask[i]));
+  });
+}
+// 맨 위 카드 끌기
+let sdrag = null, stackDragged = false;
+$('#table').addEventListener('pointerdown', e => {
+  if (!window.STACK_REVEAL || state !== 'reveal' || busy || e.target.closest('.zoom')) return;
+  const top = stackTop();
+  const s = e.target.closest('.slot');
+  if (top < 0 || s !== slots[top] || !s.classList.contains('flipped')) return;
+  sdrag = { s, top, x: e.clientX, y: e.clientY, moved: false, scale: $('#table').getBoundingClientRect().width / 820 };
+});
+addEventListener('pointermove', e => {
+  if (!sdrag) return;
+  const dx = e.clientX - sdrag.x, dy = e.clientY - sdrag.y, dist = Math.hypot(dx, dy);
+  if (!sdrag.moved && dist < 5) return;
+  sdrag.moved = true;
+  sdrag.s.classList.add('cd');
+  sdrag.s.style.translate = `${dx / sdrag.scale}px ${dy / sdrag.scale}px 40px`;
+  sdrag.s.style.zIndex = 60;
+  const next = slots.findIndex((x, i) => i > sdrag.top && !x.classList.contains('st-row'));
+  if (next >= 0 && fxTier(cards[next]) > 0) {
+    slots[next].classList.add('peekglow');
+    slots[next].style.setProperty('--pga', Math.min(1, .25 + dist / 110).toFixed(2));
+  }
+});
+addEventListener('pointerup', () => {
+  if (!sdrag) return;
+  const d = sdrag; sdrag = null;
+  d.s.classList.remove('cd');
+  if (!d.moved) return;
+  stackDragged = true; setTimeout(() => stackDragged = false, 50);
+  const dist = Math.hypot(parseFloat((d.s.style.translate || '0').split(' ')[0]) || 0, parseFloat((d.s.style.translate || '0 0').split(' ')[1]) || 0) * d.scale;
+  if (dist > 70) run(layTop);
+  else { d.s.style.translate = ''; d.s.style.zIndex = ''; slots.forEach(x => x.classList.remove('peekglow')); }
+});
+$('#table').addEventListener('click', e => { if (stackDragged) { e.stopPropagation(); e.preventDefault(); } }, true);
+
 async function settle() {
   state = 'settling'; renderBar();
   applyPrices(cards, curContribs); // 9장 공개 시점의 결과로 가격 확정
   cards.forEach((c, i) => setTag(i, c.price, null));
   await wait(500);
-  const t = $('#table'); t.classList.remove('fan'); t.classList.add('grid');
+  const t = $('#table');
+  if (!window.STACK_REVEAL) { t.classList.remove('fan'); t.classList.add('grid'); }
   await wait(600);
   state = 'settle'; renderBar();
 }

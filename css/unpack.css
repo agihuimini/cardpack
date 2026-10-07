@@ -189,3 +189,15 @@
 #modal .info{max-width:520px;padding:0 16px;font-size:13px;color:var(--muted);text-align:center;line-height:1.5}
 #modal .info b{color:var(--text)}
 #modal .btns{display:flex;gap:8px}
+
+/* ---------- 쌓아 두기 모드 (STACK_REVEAL, 본 게임) ---------- */
+#table.stackmode .slot.st-pile{transform:translate3d(calc(var(--d) * -1.5px),calc(-118px - var(--d) * 2.5px),calc(var(--d) * 2px))}
+#table.stackmode .slot.st-row{transform:translate3d(var(--rx),142px,0) scale(.76)}
+#table.stackmode .slot.kept.st-row{transform:translate3d(var(--rx),128px,0) scale(.76)}
+#table.stackmode .slot{transition:transform .45s cubic-bezier(.2,.8,.2,1),translate .25s ease-out}
+#table.stackmode .slot.cd{transition:transform .45s cubic-bezier(.2,.8,.2,1)}
+#table.stackmode .slot.st-pile:hover .card{transform:none}
+.pglow{position:absolute;inset:0;border-radius:.9em;opacity:0;pointer-events:none;transform:translateZ(-1px);
+  box-shadow:0 0 26px 10px var(--pgc,#ffd76a),0 0 70px 26px var(--pgc,#ffd76a);transition:opacity .15s}
+.slot.peekglow .pglow{opacity:var(--pga,.6);animation:pglowPulse .9s ease-in-out infinite alternate}
+@keyframes pglowPulse{from{filter:brightness(.85)}to{filter:brightness(1.35)}}
